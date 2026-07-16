@@ -210,7 +210,7 @@
 	{#if firstInStack && dayStart !== undefined}
 		<MessageDateGroup {dayStart} />
 	{/if}
-	<div class="relative">
+	<div class="relative" {...swipe?.handlers}>
 		{#if swipe}
 			<div
 				class={[
@@ -259,7 +259,6 @@
 			style:visibility={contextMenuOpen ? "hidden" : undefined}
 			style:transform={swipe?.deltaX ? `translateX(${swipe.deltaX}px)` : undefined}
 			use:observeRead
-			{...swipe?.handlers}
 		>
 			{@render content()}
 		</div>
