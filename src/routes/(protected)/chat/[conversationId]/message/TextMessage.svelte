@@ -1,12 +1,25 @@
 <script lang="ts">
-	import type { TextMessage } from "$lib/model/messaging/messages";
+	import type {
+		ApiResponseMessage,
+		TextMessage,
+	} from "$lib/model/messaging/messages";
 	import { getMessageContext, getMessageMetaContext } from "./context";
 	import MessageTail from "./MessageTail.svelte";
 
-	let { message }: { message: TextMessage["body"] } = $props();
+	let {
+		message,
+		replyTo,
+	}: {
+		message: TextMessage["body"];
+		replyTo?: ApiResponseMessage | null;
+	} = $props();
 
 	const { lastInStack, isOut } = $derived(getMessageContext()());
 	const { clone, setRef, adornments } = $derived(getMessageMetaContext()());
+
+	const replyText = $derived(
+		replyTo && replyTo.type === "Text" ? replyTo.body.text : null,
+	);
 
 	let el: HTMLDivElement | null = $state(null);
 	$effect(() => {
@@ -16,28 +29,71 @@
 
 <div
 	class={[
-		"py-2 px-3 rounded-xl w-fit max-w-100 text-black shrink-0 relative overflow-visible select-text",
+		"flex flex-col",
 		{
-			"pointer-coarse:select-none": !clone,
-			"bg-message-bubble-in": !isOut,
-			"ms-3": !isOut && !clone,
-			"rounded-es-none": lastInStack && !isOut,
-			"bg-message-bubble-out": isOut,
-			"me-3": isOut && !clone,
-			"rounded-ee-none": lastInStack && isOut,
+			"items-end": isOut,
 		},
 	]}
-	bind:this={el}
 >
-	{#if lastInStack}
-		<MessageTail
-			{isOut}
-			class={{
-				"fill-message-bubble-in": !isOut,
-				"fill-message-bubble-out": isOut,
-			}}
-		/>
+	{#if replyText !== null}
+		<div
+			class={[
+				"mb-1 flex items-end",
+				{
+					"ms-4": !isOut,
+					"me-4": isOut,
+					"flex-row-reverse": isOut,
+				},
+			]}
+		>
+			<div
+				class={[
+					"h-4 w-5 border-muted-foreground/50",
+					{
+						"ms-3 rounded-tl-[8px] border-t-2 border-l-2": !isOut && !clone,
+						"me-3 self-end rounded-tr-[8px] border-t-2 border-r-2":
+							isOut && !clone,
+					},
+				]}
+			></div>
+			<div
+				class={[
+					"w-fit max-w-100 truncate rounded-xl bg-muted px-3 py-1.5 text-sm text-muted-foreground",
+					{
+						"ms-1": !isOut && !clone,
+						"me-1": isOut && !clone,
+					},
+				]}
+			>
+				{replyText}
+			</div>
+		</div>
 	{/if}
-	<span class="whitespace-pre-wrap">{message.text}</span>
-	{@render adornments?.()}
+	<div
+		class={[
+			"relative w-fit max-w-100 shrink-0 overflow-visible rounded-xl px-3 py-2 text-black select-text",
+			{
+				"pointer-coarse:select-none": !clone,
+				"bg-message-bubble-in": !isOut,
+				"ms-3": !isOut && !clone,
+				"rounded-es-none": lastInStack && !isOut,
+				"bg-message-bubble-out": isOut,
+				"me-3": isOut && !clone,
+				"rounded-ee-none": lastInStack && isOut,
+			},
+		]}
+		bind:this={el}
+	>
+		{#if lastInStack}
+			<MessageTail
+				{isOut}
+				class={{
+					"fill-message-bubble-in": !isOut,
+					"fill-message-bubble-out": isOut,
+				}}
+			/>
+		{/if}
+		<span class="whitespace-pre-wrap">{message.text}</span>
+		{@render adornments?.()}
+	</div>
 </div>

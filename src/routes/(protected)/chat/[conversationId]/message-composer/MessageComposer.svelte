@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { showErrorToast } from "$lib/api/error";
-	import type { Message } from "$lib/model/messaging/messages";
+	import type { ApiResponseMessage, Message } from "$lib/model/messaging/messages";
 	import ComposerAttachments from "./attachments/ComposerAttachments.svelte";
+	import ComposerReplyPreview from "./ComposerReplyPreview.svelte";
 	import ComposerSubmitButton from "./ComposerSubmitButton.svelte";
 	import { setMessageComposerContext } from "./message-composer-context.svelte";
 	import MessageTextInput from "./MessageTextInput.svelte";
@@ -10,8 +11,14 @@
 	let {
 		onSend,
 		disabled,
-	}: { onSend: (params: Message) => void | Promise<void>; disabled: boolean } =
-		$props();
+		replyTo,
+		onCancelReply,
+	}: {
+		onSend: (params: Message) => void | Promise<void>;
+		disabled: boolean;
+		replyTo?: ApiResponseMessage | null;
+		onCancelReply?: () => void;
+	} = $props();
 
 	let textContent = $state("");
 
@@ -37,12 +44,15 @@
 </script>
 
 <form
-	class="relative mx-2 min-h-9.5 min-w-0 shrink-0"
+	class="relative mx-2 flex min-h-9.5 min-w-0 shrink-0 flex-col gap-1"
 	onsubmit={(event) => {
 		event.preventDefault();
 		onSubmit().catch((error) => console.error(error));
 	}}
 >
+	{#if replyTo}
+		<ComposerReplyPreview message={replyTo} onCancel={onCancelReply} />
+	{/if}
 	<MessageTextInput bind:value={textContent} />
 	{#if textContent === ""}
 		<ComposerAttachments />

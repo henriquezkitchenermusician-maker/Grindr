@@ -1,8 +1,10 @@
 <script lang="ts">
-	import { tick } from "svelte";
+	import { ArrowBendUpLeftIcon } from "phosphor-svelte";
+	import { tick, untrack } from "svelte";
 	import { expoOut } from "svelte/easing";
 	import { scale } from "svelte/transition";
 
+	import { SwipeToReply } from "$lib/util/swipe-to-reply.svelte";
 	import type { ApiResponseMessage } from "$lib/model/messaging/messages";
 	import AlbumMessage from "./AlbumMessage.svelte";
 	import { setMessageContext } from "./context";
@@ -29,6 +31,7 @@
 		onDelete,
 		onVisible,
 		onUnsend,
+		onReply,
 	}: {
 		message: ApiResponseMessage;
 		isOut: boolean;
@@ -41,7 +44,12 @@
 		onDelete?: () => void;
 		onVisible?: () => void;
 		onUnsend?: () => void;
+		onReply?: () => void;
 	} = $props();
+
+	const swipe = untrack(() =>
+		onReply ? new SwipeToReply(isOut ? "left" : "right", () => onReply?.()) : null,
+	);
 
 	const firstInStack = $derived(indexInStack === 0);
 	const lastInStack = $derived(indexInStack === stackLength - 1);
@@ -63,6 +71,10 @@
 				height: number;
 		  } = $state(false);
 	let messageElement: HTMLElement | null = $state(null);
+	const bubbleCenterY = $derived.by(() => {
+		const el = messageElement;
+		return el ? el.offsetTop + el.offsetHeight / 2 : null;
+	});
 
 	function setRef(el: HTMLElement | null) {
 		messageElement = el ?? null;
@@ -141,10 +153,10 @@
 {#snippet adornments()}
 	<div
 		class={[
-			"absolute top-0 -translate-y-1/2 z-5",
+			"absolute top-0 z-5 -translate-y-1/2",
 			{
-				"translate-x-1/2 right-0": !isOut,
-				"-translate-x-1/2 left-0": isOut,
+				"right-0 translate-x-1/2": !isOut,
+				"left-0 -translate-x-1/2": isOut,
 			},
 		]}
 	>
@@ -154,7 +166,7 @@
 				new Map<number, number>(),
 			)}
 			<div
-				class="flex items-center gap-0.5 mt-1 mr-1"
+				class="mt-1 mr-1 flex items-center gap-0.5"
 				transition:scale={{ duration: 150, easing: expoOut }}
 			>
 				{#each reactionMap.entries() as [type, count]}
@@ -168,7 +180,7 @@
 {#snippet content(clone?: boolean)}
 	<MessageWrapper {clone} {setRef} {adornments}>
 		{#if message.type === "Text"}
-			<TextMessage message={message.body} />
+			<TextMessage message={message.body} replyTo={message.replyToMessage} />
 		{:else if message.type === "Image"}
 			<ImageMessage message={message.body} />
 		{:else if message.type === "ExpiringImage"}
@@ -189,7 +201,7 @@
 
 <div
 	class={[
-		"flex flex-col gap-0.5 z-1 relative",
+		"relative z-1 flex flex-col gap-0.5",
 		{
 			"mt-3": firstInStack,
 		},
@@ -198,47 +210,64 @@
 	{#if firstInStack && dayStart !== undefined}
 		<MessageDateGroup {dayStart} />
 	{/if}
-	<div
-		class={{
-			"*:me-auto *:float-start pe-3": !isOut,
-			"*:ms-auto *:float-end ps-3": isOut,
-		}}
-		role="button"
-		tabindex="0"
-		aria-label="Message"
-		ondblclick={(event) => {
-			const selection = window.getSelection();
-			if (
-				selection &&
-				!selection.isCollapsed &&
-				messageElement?.contains(selection.anchorNode)
-			)
-				return;
-			if (!isOut && onReact) {
+	<div class="relative">
+		{#if swipe}
+			<div
+				class={[
+					"pointer-events-none absolute flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground",
+					isOut ? "right-0" : "left-0",
+				]}
+				style:top={bubbleCenterY !== null ? `${bubbleCenterY}px` : "50%"}
+				style:opacity={swipe.progress}
+				style:transform={`translateY(-50%) scale(${swipe.armed ? 1 : 0.6 + swipe.progress * 0.4})`}
+			>
+				<ArrowBendUpLeftIcon size={16} />
+			</div>
+		{/if}
+		<div
+			class={{
+				"pe-3 *:float-start *:me-auto": !isOut,
+				"ps-3 *:float-end *:ms-auto": isOut,
+			}}
+			role="button"
+			tabindex="0"
+			aria-label="Message"
+			ondblclick={(event) => {
+				const selection = window.getSelection();
+				if (
+					selection &&
+					!selection.isCollapsed &&
+					messageElement?.contains(selection.anchorNode)
+				)
+					return;
+				if (!isOut && onReact) {
+					event.preventDefault();
+					onReact(1);
+					selection?.removeAllRanges();
+				}
+			}}
+			onkeydown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					if (event.key === " ") event.preventDefault();
+					onContextMenu();
+				}
+			}}
+			oncontextmenu={(event) => {
 				event.preventDefault();
-				onReact(1);
-				selection?.removeAllRanges();
-			}
-		}}
-		onkeydown={(event) => {
-			if (event.key === "Enter" || event.key === " ") {
-				if (event.key === " ") event.preventDefault();
 				onContextMenu();
-			}
-		}}
-		oncontextmenu={(event) => {
-			event.preventDefault();
-			onContextMenu();
-		}}
-		style:visibility={contextMenuOpen ? "hidden" : undefined}
-		use:observeRead
-	>
-		{@render content()}
+			}}
+			style:visibility={contextMenuOpen ? "hidden" : undefined}
+			style:transform={swipe?.deltaX ? `translateX(${swipe.deltaX}px)` : undefined}
+			use:observeRead
+			{...swipe?.handlers}
+		>
+			{@render content()}
+		</div>
 	</div>
 	{#if lastInStack}
 		<span
 			class={[
-				"text-xs text-muted-foreground mx-3 mt-0.5",
+				"mx-3 mt-0.5 text-xs text-muted-foreground",
 				{ "text-right": isOut },
 			]}
 		>
@@ -272,5 +301,6 @@
 		reactionAvailable={message.reactions.length === 0 && !isOut}
 		{onDelete}
 		{onUnsend}
+		{onReply}
 	/>
 {/if}
