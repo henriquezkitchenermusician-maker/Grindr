@@ -13,6 +13,19 @@
 	const geohash = $derived(getGeohashSnapshot());
 
 	let gridContainer: HTMLElement | null = $state(null);
+
+	let scrollRestored = false;
+	$effect(() => {
+		if (
+			!scrollRestored &&
+			gridContainer &&
+			!gridState.loading &&
+			gridState.error === null
+		) {
+			scrollRestored = true;
+			gridContainer.scrollTop = gridState.scrollY;
+		}
+	});
 </script>
 
 <svelte:head>
@@ -24,27 +37,27 @@
 			<LocationChooser />
 		</main>
 	{:else}
-		<main
-			class="flex min-h-[calc(var(--screen-scroll)+3.5rem)] flex-col gap-4 p-4"
-		>
-			<TopBar />
+		<main class="screen-nav-host">
 			<div
-				class="@container/photo-grid flex flex-col"
+				class="pull-scroller"
 				bind:this={gridContainer}
+				onscroll={() => (gridState.scrollY = gridContainer?.scrollTop ?? 0)}
 			>
-				{#if !gridState.loading && !gridState.error}
-					<DataRefreshControl
-						container={gridContainer}
-						windowScroll
-						updating={gridState.refreshing}
-						position="top"
-						class="mb-3"
-						containerClass="z-1"
-						onclick={() => void gridState.reload()}
-					/>
-				{/if}
-				<Grid {geohash} />
+				<div
+					class="@container/photo-grid flex min-h-overscrollable flex-col gap-4 px-4 pt-4 pb-nav-clear"
+				>
+					<TopBar />
+					<Grid {geohash} />
+				</div>
 			</div>
+			{#if !gridState.loading && !gridState.error}
+				<DataRefreshControl
+					container={gridContainer}
+					updating={gridState.refreshing}
+					position="top"
+					onrefresh={() => void gridState.reload()}
+				/>
+			{/if}
 		</main>
 	{/if}
 {/await}

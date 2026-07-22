@@ -13,7 +13,6 @@
 	--card-foreground: oklch(0.985 0 0);
 	--popover: oklch(0.205 0 0);
 	--popover-foreground: oklch(0.985 0 0);
-	/* --primary: oklch(0.795 0.184 86.047); */
 	--primary: oklch(86.521% 0.17664 90.372);
 	--primary-foreground: oklch(0.421 0.095 57.708);
 	--secondary: oklch(0.274 0.006 286.033);
@@ -137,6 +136,8 @@
 :root,
 body {
 	min-height: 100dvh;
+	/* No app-level rubber-banding; scroll containers opt back in via
+	   overscroll-behavior: contain for pull-to-refresh. */
 	overscroll-behavior: none;
 	user-select: none;
 	-webkit-user-select: none;
@@ -144,7 +145,9 @@ body {
 	--selection-bar-height: 4.75rem;
 	--content-pb: calc(var(--nav-height) + var(--safe-area-bottom));
 	--screen-safe: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
-	--screen-scroll: calc(100dvh - var(--safe-area-top) - var(--content-pb));
+	/* Runs under the bottom navbar; pair with -mb-(--content-pb) and
+	   pb-nav-clear so content scrolls beneath the navbar's blur. */
+	--screen-nav: calc(100dvh - var(--safe-area-top));
 	text-rendering: geometricPrecision;
 	image-rendering: optimizeQuality;
 	shape-rendering: geometricPrecision;
@@ -289,6 +292,28 @@ a {
 }
 @utility max-h-photo {
 	max-height: min(70vh, 500px);
+}
+
+/* 1px past full height keeps a scroll container technically scrollable, so
+   a native rubber band (and with it pull-to-refresh) works on short content */
+@utility min-h-overscrollable {
+	min-height: calc(100% + 1px);
+}
+
+@utility screen-nav-host {
+	/* Scroller child needs pull-scroller */
+	/* Content inside needs pb-nav-clear */
+	@apply relative h-(--screen-nav) w-full;
+	margin-bottom: calc(var(--content-pb) * -1);
+}
+
+/* Pull-to-refresh containers */
+@utility pull-scroller {
+	@apply size-full overflow-auto overscroll-contain;
+}
+
+[data-sonner-toaster] {
+	font-family: var(--font-sans) !important;
 }
 
 .toast[data-styled="true"] {

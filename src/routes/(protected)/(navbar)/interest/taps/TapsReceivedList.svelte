@@ -1,8 +1,14 @@
+<script module lang="ts">
+	let savedScrollY = 0;
+</script>
+
 <script lang="ts">
-	import { onDestroy, untrack } from "svelte";
+	import { beforeNavigate } from "$app/navigation";
+	import { onDestroy, tick, untrack } from "svelte";
 
 	import ApiErrorDisplay from "$lib/components/feedback/ApiErrorDisplay.svelte";
 	import DataRefreshControl from "$lib/components/feedback/DataRefreshControl.svelte";
+	import { nearestScrollableAncestor } from "$lib/components/feedback/refresh/scroll-chain";
 	import Skeleton from "$lib/components/ui/skeleton/skeleton.svelte";
 	import EmptyTapsList from "./EmptyTapsList.svelte";
 	import TapReceivedProfile from "./TapReceivedProfile.svelte";
@@ -10,10 +16,8 @@
 
 	let {
 		ourProfileId,
-		class: className,
 	}: {
 		ourProfileId: number;
-		class?: import("svelte/elements").ClassValue;
 	} = $props();
 
 	const taps = untrack(() => new TapsState({ ourProfileId }));
@@ -21,12 +25,26 @@
 
 	let container: HTMLDivElement | null = $state(null);
 
+	beforeNavigate(() => {
+		if (container) savedScrollY = container.scrollTop;
+	});
+
+	let scrollRestored = false;
+	$effect(() => {
+		if (scrollRestored || !container || taps.loading || taps.error) return;
+		scrollRestored = true;
+		const el = container;
+		const target = savedScrollY;
+		// Restoring scroll against the empty skeleton frame would clamp the target to 0
+		if (target > 0) void tick().then(() => (el.scrollTop = target));
+	});
+
 	function observeSentinel(node: HTMLElement) {
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries[0].isIntersecting) taps.loadMore();
 			},
-			{ rootMargin: "400px" },
+			{ root: nearestScrollableAncestor(node), rootMargin: "400px" },
 		);
 		observer.observe(node);
 		return {
@@ -37,38 +55,41 @@
 	}
 </script>
 
-<div
-	bind:this={container}
-	class={["flex min-w-list-rail flex-1 flex-col gap-1", className]}
->
-	{#if taps.loading}
-		{#each Array(8)}
-			<Skeleton class="h-24.5 w-full shrink-0" />
-		{/each}
-	{:else if taps.error}
-		<div class="flex flex-1">
-			<ApiErrorDisplay
-				error={taps.error}
-				onRetry={() => taps.retry()}
-				class="m-auto"
-			/>
+<div class="screen-nav-host">
+	<div bind:this={container} class="pull-scroller">
+		<div
+			class="mx-auto flex min-h-overscrollable w-full max-w-120 flex-col gap-1 px-4 pt-16 pb-nav-clear"
+		>
+			{#if taps.loading}
+				{#each Array(8)}
+					<Skeleton class="h-24.5 w-full shrink-0" />
+				{/each}
+			{:else if taps.error}
+				<div class="flex flex-1">
+					<ApiErrorDisplay
+						error={taps.error}
+						onRetry={() => taps.retry()}
+						class="m-auto"
+					/>
+				</div>
+			{:else}
+				{#each taps.taps as tap (tap.profileId)}
+					<TapReceivedProfile {tap} />
+				{:else}
+					<EmptyTapsList />
+				{/each}
+				{#if taps.hasMore}
+					<div class="h-0" use:observeSentinel></div>
+				{/if}
+			{/if}
 		</div>
-	{:else}
+	</div>
+	{#if !taps.loading && !taps.error}
 		<DataRefreshControl
 			{container}
-			windowScroll
 			updating={taps.refreshing}
 			position="top"
-			class="mb-3"
-			onclick={() => void taps.refresh()}
+			onrefresh={() => void taps.refresh()}
 		/>
-		{#each taps.taps as tap (tap.profileId)}
-			<TapReceivedProfile {tap} />
-		{:else}
-			<EmptyTapsList />
-		{/each}
-		{#if taps.hasMore}
-			<div class="h-0" use:observeSentinel></div>
-		{/if}
 	{/if}
 </div>
