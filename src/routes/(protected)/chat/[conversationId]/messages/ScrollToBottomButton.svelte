@@ -10,10 +10,7 @@
 	let {
 		onclick,
 		seenTimestamp,
-	}: {
-		onclick: () => void;
-		seenTimestamp: number;
-	} = $props();
+	}: { onclick: () => void; seenTimestamp: number } = $props();
 
 	const conversationState = $derived(getConversationState()());
 
@@ -27,7 +24,7 @@
 </script>
 
 <div
-	class="absolute right-3 bottom-14.5 z-2"
+	class="absolute right-3 bottom-[calc(var(--composer-height)+--spacing(3))] z-2"
 	transition:fly={{ y: 48, opacity: 0, duration: 200, easing: sineOut }}
 >
 	<Button

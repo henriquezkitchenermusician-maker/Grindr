@@ -6,17 +6,17 @@
 	import EmptyGrid from "./EmptyGrid.svelte";
 	import GridProfileMiniCard from "./GridProfileMiniCard.svelte";
 
-	let {
-		geohash,
-	}: {
-		geohash: string;
-	} = $props();
+	let { geohash }: { geohash: string } = $props();
 
 	const gridProfiles = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and spread inside this $derived, never mutated afterwards
 		const byId = new Map<number, GridProfile>();
 		for (const item of gridState.items) {
 			const existing = byId.get(item.id);
-			if (!existing || (existing.type === "lazy" && item.type === "rendered")) {
+			if (
+				!existing ||
+				(existing.type === "lazy" && item.type === "rendered")
+			) {
 				byId.set(item.id, item);
 			}
 		}
@@ -27,14 +27,10 @@
 		gridState.load(geohash);
 	});
 
-	export function refresh() {
-		gridState.refresh();
-	}
-
 	function observeSentinel(node: HTMLElement) {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting)
+				if (entries[0]?.isIntersecting)
 					gridState.loadMore().catch((error) => console.error(error));
 			},
 			{ root: nearestScrollableAncestor(node), rootMargin: "400px" },
@@ -50,11 +46,10 @@
 	function observeLazy(node: HTMLElement, params: { id: number }) {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting) {
+				if (entries[0]?.isIntersecting) {
 					gridState
 						.resolveProfile(params.id)
 						.catch((error) => console.error(error));
-					observer.disconnect();
 				}
 			},
 			{ root: nearestScrollableAncestor(node), rootMargin: "200px" },
@@ -77,7 +72,7 @@
 		<div class="col-span-full flex p-4">
 			<ApiErrorDisplay
 				error={gridState.error}
-				onRetry={() => gridState.refresh()}
+				onRetry={() => gridState.retry()}
 				class="m-auto"
 			/>
 		</div>

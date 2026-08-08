@@ -40,6 +40,7 @@
 	--sidebar-ring: oklch(0.556 0 0);
 	--message-bubble-in: oklch(0.7882 0.1455 228.36);
 	--message-bubble-out: oklch(0.8618 0.1973 89.76);
+	--list-rail: 117px;
 }
 
 @theme inline {
@@ -92,7 +93,7 @@
 	--text-3xs: 0.625rem; /* 10px */
 
 	--spacing-avatar: 37.5px;
-	--spacing-list-rail: 117px;
+	--spacing-list-rail: var(--list-rail);
 }
 
 /* Keep in sync with src/lib/util/breakpoints.svelte.ts */
@@ -106,6 +107,8 @@
 
 @theme {
 	--radius-grid: 17px;
+
+	--radius-composer: 19px;
 }
 
 /* .photo-grid column-count thresholds, queried against the nearest
@@ -144,7 +147,9 @@ body {
 	--nav-height: 4rem;
 	--selection-bar-height: 4.75rem;
 	--content-pb: calc(var(--nav-height) + var(--safe-area-bottom));
-	--screen-safe: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
+	--screen-safe: calc(
+		100dvh - var(--safe-area-top) - var(--safe-area-bottom)
+	);
 	/* Runs under the bottom navbar; pair with -mb-(--content-pb) and
 	   pb-nav-clear so content scrolls beneath the navbar's blur. */
 	--screen-nav: calc(100dvh - var(--safe-area-top));

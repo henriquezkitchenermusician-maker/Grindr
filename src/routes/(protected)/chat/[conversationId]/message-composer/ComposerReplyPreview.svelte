@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { ArrowBendUpLeftIcon, XIcon } from "phosphor-svelte";
 
+	import type { ApiResponseMessage } from "$lib/model/messaging/messages";
 	import {
-		type ApiResponseMessage,
 		previewFromMessage,
 		previewLabel,
-	} from "$lib/model/messaging/messages";
+	} from "$lib/model/messaging/message-preview";
 
 	let {
 		message,

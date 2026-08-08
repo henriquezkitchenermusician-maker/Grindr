@@ -16,9 +16,9 @@ test.describe("screen insets", () => {
 			const el = document.querySelector(
 				"div.absolute.right-7.bottom-0",
 			) as HTMLElement;
-			const inset = getComputedStyle(document.documentElement).getPropertyValue(
-				"--safe-area-bottom",
-			);
+			const inset = getComputedStyle(
+				document.documentElement,
+			).getPropertyValue("--safe-area-bottom");
 			return {
 				bottom: Math.round(el.getBoundingClientRect().bottom),
 				viewport: window.innerHeight,
@@ -38,18 +38,22 @@ test.describe("screen insets", () => {
 	test("the conversation list clears the bottom inset", async ({ page }) => {
 		await installTauriShim(page);
 		await page.goto("/chat");
-		await page.locator('a[href^="/chat/1"]').first().waitFor({ timeout: 30_000 });
+		await page
+			.locator('a[href^="/chat/1"]')
+			.first()
+			.waitFor({ timeout: 30_000 });
 		const overflow = await page.evaluate(() => {
 			const doc = document.documentElement;
 			return doc.scrollHeight - window.innerHeight;
 		});
-		expect(overflow, "no page scroll is introduced by the insets").toBeLessThanOrEqual(
-			1,
-		);
+		expect(
+			overflow,
+			"no page scroll is introduced by the insets",
+		).toBeLessThanOrEqual(1);
 	});
 });
 
-test.describe("zoom is disabled", () => {
+test.describe("keyboard zoom is disabled", () => {
 	test("the viewport forbids user scaling", async ({ page }) => {
 		await installTauriShim(page);
 		await page.goto("/chat");
@@ -60,29 +64,15 @@ test.describe("zoom is disabled", () => {
 		expect(content).toContain("maximum-scale=1");
 	});
 
-	test("ctrl+wheel is cancelled instead of zooming", async ({ page }) => {
-		await installTauriShim(page);
-		await page.goto("/chat");
-		await page.locator('a[href^="/chat/1"]').first().waitFor({ timeout: 30_000 });
-		const prevented = await page.evaluate(() => {
-			const event = new WheelEvent("wheel", {
-				deltaY: -120,
-				ctrlKey: true,
-				bubbles: true,
-				cancelable: true,
-			});
-			window.dispatchEvent(event);
-			return event.defaultPrevented;
-		});
-		expect(prevented, "ctrl+wheel zoom is blocked").toBe(true);
-	});
-
 	test("ctrl/cmd +, - and 0 are cancelled instead of zooming", async ({
 		page,
 	}) => {
 		await installTauriShim(page);
 		await page.goto("/chat");
-		await page.locator('a[href^="/chat/1"]').first().waitFor({ timeout: 30_000 });
+		await page
+			.locator('a[href^="/chat/1"]')
+			.first()
+			.waitFor({ timeout: 30_000 });
 		const results = await page.evaluate(() =>
 			["+", "-", "=", "0"].map((key) => {
 				const event = new KeyboardEvent("keydown", {

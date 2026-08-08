@@ -23,12 +23,13 @@
 				}}
 			>
 				<Item.Content class="max-cramped:min-w-0">
-					<Item.Title class="inline-block max-w-full min-w-0 truncate">
+					<Item.Title
+						class="inline-block max-w-full min-w-0 truncate"
+					>
 						{title}
 					</Item.Title>
 				</Item.Content>
 				<Item.Actions class="min-w-0">
-					<!-- <Item.Description class="min-w-0">{value}</Item.Description> -->
 					<CaretRightIcon class="size-4 shrink-0" />
 				</Item.Actions>
 			</a>
@@ -40,7 +41,9 @@
 		{#snippet child({ props })}
 			<a {href} {...props}>
 				<Item.Content class="max-cramped:min-w-0">
-					<Item.Title class="inline-block max-w-full min-w-0 truncate">
+					<Item.Title
+						class="inline-block max-w-full min-w-0 truncate"
+					>
 						{title}
 					</Item.Title>
 				</Item.Content>

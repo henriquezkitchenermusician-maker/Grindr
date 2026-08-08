@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { showErrorToast } from "$lib/api/error";
+	import { showErrorToast } from "$lib/api/error-toast";
 	import {
 		deleteMessageForMe,
 		unsendMessage,
@@ -8,11 +8,7 @@
 	import { processMessages } from "../messages";
 	import Message from "./message/Message.svelte";
 
-	let {
-		seenTimestamp = $bindable(),
-	}: {
-		seenTimestamp: number;
-	} = $props();
+	let { seenTimestamp = $bindable() }: { seenTimestamp: number } = $props();
 
 	const conversationState = $derived(getConversationState()());
 
@@ -33,7 +29,7 @@
 		stackLength={message.stackLength}
 		dayStart={message.dayStart}
 		status={message.status}
-		isRead={isOut && message.messageId === messages[0].messageId
+		isRead={isOut && message.messageId === messages[0]?.messageId
 			? conversationState.lastReadTimestamp === message.timestamp
 			: null}
 		onVisible={!isOut
@@ -54,23 +50,20 @@
 				});
 			} catch (error) {
 				console.error(error);
-				showErrorToast({
-					label: "Failed to delete message",
-					error,
-				});
+				showErrorToast({ label: "Failed to delete message", error });
 				revert?.();
 			}
 		}}
 		onReply={() => conversationState.setReplyTo(message)}
 		onReact={async (reactionType: number) => {
 			try {
-				await conversationState.reactTo(message.messageId, reactionType);
+				await conversationState.reactTo({
+					messageId: message.messageId,
+					reactionType,
+				});
 			} catch (error) {
 				console.error(error);
-				showErrorToast({
-					label: "Failed to react to message",
-					error,
-				});
+				showErrorToast({ label: "Failed to react to message", error });
 			}
 		}}
 		onUnsend={isOut && !message.unsent

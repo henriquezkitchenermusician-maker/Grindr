@@ -1,6 +1,22 @@
 import type { CDPSession, Page } from "@playwright/test";
 
 export const DEMO_CONVERSATION = "/chat/100001:123456000";
+export const DEMO_GEOHASH = "u33dc0cpgp00";
+
+export async function ensureGridLocation(page: Page): Promise<void> {
+	const allFilters = page.locator('[aria-label="All filters"]');
+	if ((await allFilters.count()) === 0) {
+		await page.keyboard.press("Meta+k");
+		const palette = page.getByRole("combobox");
+		await palette.waitFor();
+		await palette.fill(`@${DEMO_GEOHASH}`);
+		await page
+			.locator(`[role="option"][data-value="@${DEMO_GEOHASH}"]`)
+			.waitFor();
+		await page.keyboard.press("Enter");
+	}
+	await allFilters.waitFor({ timeout: 60_000 });
+}
 
 export async function installTauriShim(page: Page): Promise<void> {
 	await page.addInitScript(() => {
@@ -15,7 +31,11 @@ export async function installTauriShim(page: Page): Promise<void> {
 
 		const files = new Map<string, Uint8Array>();
 
-		const invoke = (cmd: string, args?: unknown, opts?: unknown): unknown => {
+		const invoke = (
+			cmd: string,
+			args?: unknown,
+			opts?: unknown,
+		): unknown => {
 			const fs = (args ?? {}) as FsArgs;
 			const headers = ((opts ?? {}) as InvokeOptions).headers ?? {};
 
@@ -36,7 +56,10 @@ export async function installTauriShim(page: Page): Promise<void> {
 			}
 			if (cmd === "plugin:fs|write_file") {
 				const path = decodeURIComponent(headers.path ?? fs.path ?? "");
-				files.set(path, args instanceof Uint8Array ? args : new Uint8Array());
+				files.set(
+					path,
+					args instanceof Uint8Array ? args : new Uint8Array(),
+				);
 				return null;
 			}
 			return null;
@@ -53,6 +76,8 @@ export async function installTauriShim(page: Page): Promise<void> {
 				exe_extension: "",
 			},
 			__TAURI_INTERNALS__: {
+				convertFileSrc: (filePath: string, protocol = "asset") =>
+					`${protocol}://localhost/${encodeURIComponent(filePath)}`,
 				transformCallback: () => Math.floor(Math.random() * 1e9),
 				metadata: {
 					currentWindow: { label: "main" },

@@ -20,7 +20,7 @@
 	function observe(node: HTMLElement) {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting) {
+				if (entries[0]?.isIntersecting) {
 					mounted = true;
 					observer.disconnect();
 				}
@@ -44,5 +44,8 @@
 		{onRequestDelete}
 	/>
 {:else}
-	<div class="h-24.5 w-full shrink-0 rounded-2xl bg-muted/30" use:observe></div>
+	<div
+		class="h-24.5 w-full shrink-0 rounded-2xl bg-muted/30"
+		use:observe
+	></div>
 {/if}
