@@ -5,6 +5,7 @@
 	import { scale } from "svelte/transition";
 
 	import { SwipeToReply } from "$lib/util/swipe-to-reply.svelte";
+	import { observeIntersection } from "$lib/util/observe-intersection";
 	import type { ApiResponseMessage } from "$lib/model/messaging/messages";
 	import AlbumMessage from "./AlbumMessage.svelte";
 	import { setMessageContext } from "./context";
@@ -125,25 +126,6 @@
 	}
 
 	let contextMenu: HTMLDialogElement | null = $state(null);
-
-	function observeRead(node: HTMLElement) {
-		if (!onVisible) return {};
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0]?.isIntersecting) {
-					onVisible();
-					observer.disconnect();
-				}
-			},
-			{ threshold: 0 },
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			},
-		};
-	}
 </script>
 
 {#snippet adornments()}
@@ -254,7 +236,7 @@
 			}}
 			style:visibility={contextMenuOpen ? "hidden" : undefined}
 			style:transform={swipe?.deltaX ? `translateX(${swipe.deltaX}px)` : undefined}
-			use:observeRead
+			use:observeIntersection={{ handle: onVisible, once: true }}
 		>
 			{@render content()}
 		</div>
