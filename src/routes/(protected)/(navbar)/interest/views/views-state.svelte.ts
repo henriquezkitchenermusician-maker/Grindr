@@ -1,4 +1,11 @@
+import { accountScoped } from "$lib/api/account-caches";
+import { markBlockedProfilesUnviewable } from "$lib/api/browse/blocks";
 import { getViews } from "$lib/api/interest/views";
+import {
+	isProfileViewable,
+	onProfileViewabilityChange,
+} from "$lib/api/users/profile-viewability";
+import { onProfileEdit } from "$lib/api/users/profiles";
 import { ReconcilingListState } from "$lib/util/reconciling-list-state.svelte";
 import { viewedMeV1NewViewReceivedEventSchema, ws } from "$lib/ws.svelte";
 import type { ViewerProfile, ViewPreview } from "$lib/model/interest/views";
@@ -17,6 +24,21 @@ export class ViewsState extends ReconcilingListState<
 > {
 	#profiles: ViewerProfile[] = $state([]);
 	#previews: ViewPreview[] = $state([]);
+	#unsubscribeProfileEdits = onProfileEdit(({ profileId, patch }) => {
+		if (patch.isFavorite === undefined) return;
+		this.setFavorite({ profileId, isFavorite: patch.isFavorite });
+	});
+	#unsubscribeViewability = onProfileViewabilityChange(
+		({ profileId, viewable }) => {
+			if (viewable) {
+				void this.refresh();
+				return;
+			}
+			this.#profiles = this.#profiles.filter(
+				(view) => view.profileId !== profileId,
+			);
+		},
+	);
 
 	constructor() {
 		super({
@@ -24,6 +46,21 @@ export class ViewsState extends ReconcilingListState<
 			refreshErrorLabel: "Failed to refresh views",
 		});
 		this.start();
+	}
+
+	setFavorite({
+		profileId,
+		isFavorite,
+	}: {
+		profileId: number;
+		isFavorite: boolean;
+	}): void {
+		const index = this.#profiles.findIndex(
+			(v) => v.profileId === profileId,
+		);
+		const profile = this.#profiles[index];
+		if (!profile) return;
+		this.#profiles = this.#profiles.with(index, { ...profile, isFavorite });
 	}
 
 	get views(): ViewGridEntry[] {
@@ -51,22 +88,30 @@ export class ViewsState extends ReconcilingListState<
 	}
 
 	protected fetch(): Promise<ViewsSnapshot> {
+		void markBlockedProfilesUnviewable().catch(console.error);
 		return getViews();
 	}
 
-	protected applySnapshot(snapshot: ViewsSnapshot): Set<number> {
-		this.#profiles = snapshot.profiles;
+	protected applySnapshotReturningCoveredKeys(
+		snapshot: ViewsSnapshot,
+	): Set<number> {
+		this.#profiles = snapshot.profiles.filter((view) =>
+			isProfileViewable(view.profileId),
+		);
 		this.#previews = snapshot.previews;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- caller only reads .has() then drops it
 		return new Set(snapshot.profiles.map((profile) => profile.profileId));
 	}
 
 	protected applyUpsert(fresh: ViewerProfile): void {
+		if (!isProfileViewable(fresh.profileId)) return;
 		const index = this.#profiles.findIndex(
 			(v) => v.profileId === fresh.profileId,
 		);
+		const prev = this.#profiles[index];
 		let next = fresh;
-		if (index !== -1) {
-			const [prev] = this.#profiles.splice(index, 1);
+		if (prev) {
+			this.#profiles.splice(index, 1);
 			next = {
 				...prev,
 				...fresh,
@@ -87,6 +132,12 @@ export class ViewsState extends ReconcilingListState<
 
 	protected keyOf(view: ViewerProfile): number {
 		return view.profileId;
+	}
+
+	override destroy(): void {
+		this.#unsubscribeProfileEdits();
+		this.#unsubscribeViewability();
+		super.destroy();
 	}
 
 	protected subscribeEvents(): Promise<() => void> {
@@ -111,3 +162,5 @@ export class ViewsState extends ReconcilingListState<
 		);
 	}
 }
+
+export const getViewsState = accountScoped(() => new ViewsState());

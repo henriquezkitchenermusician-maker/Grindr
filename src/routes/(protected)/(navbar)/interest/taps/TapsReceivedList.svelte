@@ -1,62 +1,38 @@
-<script module lang="ts">
-	let savedScrollY = 0;
-</script>
-
 <script lang="ts">
-	import { beforeNavigate } from "$app/navigation";
-	import { onDestroy, tick, untrack } from "svelte";
+	import { untrack } from "svelte";
 
 	import ApiErrorDisplay from "$lib/components/feedback/ApiErrorDisplay.svelte";
 	import DataRefreshControl from "$lib/components/feedback/DataRefreshControl.svelte";
-	import { nearestScrollableAncestor } from "$lib/components/feedback/refresh/scroll-chain";
 	import Skeleton from "$lib/components/ui/skeleton/skeleton.svelte";
+	import { getTapsState } from "$lib/interest/taps-state.svelte";
+	import { observeIntersection } from "$lib/util/observe-intersection";
+	import { restoreScrollOnce } from "$lib/util/scroll-restore.svelte";
 	import EmptyTapsList from "./EmptyTapsList.svelte";
 	import TapReceivedProfile from "./TapReceivedProfile.svelte";
-	import { TapsState } from "./taps-state.svelte";
 
-	let {
-		ourProfileId,
-	}: {
-		ourProfileId: number;
-	} = $props();
+	let { ourProfileId }: { ourProfileId: number } = $props();
 
-	const taps = untrack(() => new TapsState({ ourProfileId }));
-	onDestroy(() => taps.destroy());
+	const taps = untrack(() => {
+		const state = getTapsState(ourProfileId);
+		state.load();
+		return state;
+	});
+
+	$effect(() => {
+		if (taps.hasUnseen) taps.markViewed();
+	});
 
 	let container: HTMLDivElement | null = $state(null);
 
-	beforeNavigate(() => {
-		if (container) savedScrollY = container.scrollTop;
-	});
-
-	let scrollRestored = false;
-	$effect(() => {
-		if (scrollRestored || !container || taps.loading || taps.error) return;
-		scrollRestored = true;
-		const el = container;
-		const target = savedScrollY;
-		// Restoring scroll against the empty skeleton frame would clamp the target to 0
-		if (target > 0) void tick().then(() => (el.scrollTop = target));
-	});
-
-	function observeSentinel(node: HTMLElement) {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting) taps.loadMore();
-			},
-			{ root: nearestScrollableAncestor(node), rootMargin: "400px" },
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			},
-		};
-	}
+	restoreScrollOnce(() => container, taps);
 </script>
 
 <div class="screen-nav-host">
-	<div bind:this={container} class="pull-scroller">
+	<div
+		bind:this={container}
+		class="pull-scroller"
+		onscroll={() => (taps.scrollY = container?.scrollTop ?? 0)}
+	>
 		<div
 			class="mx-auto flex min-h-overscrollable w-full max-w-120 flex-col gap-1 px-4 pt-16 pb-nav-clear"
 		>
@@ -79,7 +55,14 @@
 					<EmptyTapsList />
 				{/each}
 				{#if taps.hasMore}
-					<div class="h-0" use:observeSentinel></div>
+					<div
+						class="h-0"
+						use:observeIntersection={{
+							handle: () => taps.loadMore(),
+							root: "scroller",
+							rootMargin: "400px",
+						}}
+					></div>
 				{/if}
 			{/if}
 		</div>

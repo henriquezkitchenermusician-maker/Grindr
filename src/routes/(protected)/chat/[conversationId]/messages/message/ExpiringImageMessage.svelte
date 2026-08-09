@@ -3,13 +3,17 @@
 	import { ImagesIcon } from "phosphor-svelte";
 	import type PhotoSwipeLightbox from "photoswipe/lightbox";
 
-	import { showErrorToast } from "$lib/api/error";
+	import { showErrorToast } from "$lib/api/error-toast";
 	import { getSingleMessage } from "$lib/api/messaging/messages";
 	import {
 		type ExpiringImageMessage,
 		expiringImageMessageSchema,
 	} from "$lib/model/messaging/messages";
-	import { backGestureEventHandlers } from "$lib/platform/back-gesture-event.svelte";
+	import { proxyMediaUrl } from "$lib/util/media";
+	import {
+		applyPhotoSwipeBackGesture,
+		applyPhotoSwipeErrorUi,
+	} from "$lib/util/photoswipe";
 	import LockedMedia from "./LockedMedia.svelte";
 	import { MessageMediaState } from "./message-media.svelte";
 
@@ -27,10 +31,7 @@
 
 	const className: import("svelte/elements").ClassValue = $derived([
 		"relative",
-		{
-			"ms-3": !media.clone,
-			"size-full": media.clone,
-		},
+		{ "ms-3": !media.clone, "size-full": media.clone },
 	]);
 
 	const contentClass: import("svelte/elements").ClassValue = $derived([
@@ -65,13 +66,8 @@
 					messageId,
 				}).then((res) => expiringImageMessageSchema.parse(res.message));
 				if (image.url === null) throw new Error("Image URL is null");
-				cachedImage = { url: image.url };
-				imageState = {
-					status: "open",
-					image: {
-						url: image.url,
-					},
-				};
+				cachedImage = { url: proxyMediaUrl(image.url) };
+				imageState = { status: "open", image: cachedImage };
 			} catch (error) {
 				console.error(error);
 				showErrorToast({
@@ -94,20 +90,12 @@
 					pswpModule: () => import("photoswipe"),
 					mainClass: `pswp--buttons-visible`,
 				});
+				applyPhotoSwipeErrorUi(lightbox);
 				lightbox.addFilter("numItems", () => 1);
 				lightbox.addFilter("itemData", () => {
 					return { src: image.url, width: 0, height: 0 };
 				});
-				const onBackGesture = () => {
-					lightbox?.pswp?.close();
-					return false;
-				};
-				lightbox.on("beforeOpen", () => {
-					backGestureEventHandlers.add(onBackGesture);
-				});
-				lightbox.on("close", () => {
-					backGestureEventHandlers.delete(onBackGesture);
-				});
+				applyPhotoSwipeBackGesture(lightbox);
 				lightbox.on("closingAnimationEnd", () => {
 					imageState = { status: "idle" };
 				});

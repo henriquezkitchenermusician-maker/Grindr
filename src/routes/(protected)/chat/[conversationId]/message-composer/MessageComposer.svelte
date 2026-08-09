@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { showErrorToast } from "$lib/api/error";
+	import { showErrorToast } from "$lib/api/error-toast";
 	import type { Message } from "$lib/model/messaging/messages";
 	import ComposerAttachments from "./attachments/ComposerAttachments.svelte";
 	import ComposerSubmitButton from "./ComposerSubmitButton.svelte";
@@ -28,28 +28,22 @@
 			textContent = "";
 		} catch (error) {
 			console.error(error);
-			showErrorToast({
-				label: "Failed to send message",
-				error,
-			});
+			showErrorToast({ label: "Failed to send message", error });
 		}
 	}
 
-	setMessageComposerContext(() => ({
-		disabled,
-		sendMessage: onSend,
-	}));
+	function remeasureBeforeResizeObserverCatchesUp() {
+		if (form) height = form.clientHeight;
+	}
+
+	setMessageComposerContext(() => ({ disabled, sendMessage: onSend }));
 </script>
 
 <form
 	bind:this={form}
 	class="absolute bottom-0 z-20 min-h-9.5 w-full min-w-0 shrink-0 px-2 pb-2"
 	bind:clientHeight={height}
-	oninput={() => {
-		// WebKit bug: resive observer emits event a frame late,
-		// painting the taller composer over the newest message once
-		if (form) height = form.clientHeight;
-	}}
+	oninput={remeasureBeforeResizeObserverCatchesUp}
 	onsubmit={(event) => {
 		event.preventDefault();
 		onSubmit().catch((error) => console.error(error));

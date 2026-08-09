@@ -6,23 +6,23 @@ To get started, choose one of the methods below (Docker, Nix or manual) and foll
 > Only Android release builds are tested as of June 23rd, 2026.
 
 - [Building Open Grind](#building-open-grind)
-  - [Build with Docker (easiest)](#build-with-docker-easiest)
-    - [Clean-up Docker](#clean-up-docker)
-  - [Build with Nix (builds everywhere)](#build-with-nix-builds-everywhere)
-  - [Build manually (advanced)](#build-manually-advanced)
-  - [Credential storage](#credential-storage)
-  - [Signing](#signing)
-    - [Sign \& build with Docker](#sign--build-with-docker)
-    - [Sign \& build with Nix](#sign--build-with-nix)
-    - [Sign \& build manually](#sign--build-manually)
-  - [Trusting the build environment](#trusting-the-build-environment)
-    - [Verifying Nix and flake.lock](#verifying-nix-and-flakelock)
-    - [Verifying the Gradle wrapper jar](#verifying-the-gradle-wrapper-jar)
-  - [Verifying a published release](#verifying-a-published-release)
-  - [Reproducible CI release](#reproducible-ci-release)
-  - [Reproducibility](#reproducibility)
-    - [Refreshing the lock](#refreshing-the-lock)
-    - [Cargo / JS hygiene](#cargo--js-hygiene)
+    - [Build with Docker (easiest)](#build-with-docker-easiest)
+        - [Clean-up Docker](#clean-up-docker)
+    - [Build with Nix (builds everywhere)](#build-with-nix-builds-everywhere)
+    - [Build manually (advanced)](#build-manually-advanced)
+    - [Credential storage](#credential-storage)
+    - [Signing](#signing)
+        - [Sign \& build with Docker](#sign--build-with-docker)
+        - [Sign \& build with Nix](#sign--build-with-nix)
+        - [Sign \& build manually](#sign--build-manually)
+    - [Trusting the build environment](#trusting-the-build-environment)
+        - [Verifying Nix and flake.lock](#verifying-nix-and-flakelock)
+        - [Verifying the Gradle wrapper jar](#verifying-the-gradle-wrapper-jar)
+    - [Verifying a published release](#verifying-a-published-release)
+    - [Reproducible CI release](#reproducible-ci-release)
+    - [Reproducibility](#reproducibility)
+        - [Refreshing the lock](#refreshing-the-lock)
+        - [Cargo / JS hygiene](#cargo--js-hygiene)
 
 ## Build with Docker (easiest)
 
@@ -259,6 +259,7 @@ Every input that affects the output bytes is pinned in exactly one place:
 
 | Component                               | Where it's pinned                                                |
 | --------------------------------------- | ---------------------------------------------------------------- |
+| Docker base image (Docker build path)   | `Dockerfile` (`nixos/nix` pinned by `@sha256`)                   |
 | nixpkgs                                 | `flake.lock`                                                     |
 | Rust toolchain                          | `rust-toolchain.toml`                                            |
 | JDK                                     | `flake.nix` (`jdk21_headless`)                                   |
@@ -274,6 +275,7 @@ Every input that affects the output bytes is pinned in exactly one place:
 | Tauri CLI                               | `package.json` / `bun.lock`                                      |
 | JS deps                                 | `bun.lock`                                                       |
 | Cargo deps                              | `src-tauri/Cargo.lock`                                           |
+| Dependency patches                      | [patches/](./patches), [src-tauri/patches/](./src-tauri/patches) |
 
 The `opengrind.android.*` keys in `gradle.properties` are read by both Gradle and `flake.nix`. Bump them there once and both consumers pick up the new value.
 

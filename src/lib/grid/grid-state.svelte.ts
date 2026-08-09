@@ -1,13 +1,18 @@
 import { untrack } from "svelte";
-import z from "zod";
+import type z from "zod";
 
 import { registerAccountCache } from "$lib/api/account-caches";
-import { showErrorToast } from "$lib/api/error";
+import { showErrorToast } from "$lib/api/error-toast";
+import { onProfileViewabilityChange } from "$lib/api/users/profile-viewability";
+import { onProfileEdit } from "$lib/api/users/profiles";
+import { WEIGHT_KG_MAX, WEIGHT_KG_MIN } from "$lib/model/browse/grid/filters";
+import { reconciler } from "$lib/util/reconcile";
 import type { cascadeV4QuerySchema } from "$lib/model/browse/grid/cascade/query/v4";
 import {
 	getCachedProfile,
 	getGrid,
 	type GridProfile,
+	patchCachedProfile,
 	resolveLazyProfile,
 	setCachedProfile,
 } from "./grid";
@@ -15,7 +20,7 @@ import { GridSearchFiltersState } from "./grid-search-filters-state.svelte";
 
 class GridState {
 	filters = new GridSearchFiltersState({ onRefresh: () => this.retry() });
-	items: GridProfile[] = $state([]);
+	items: GridProfile[] = $state.raw([]);
 	nextPage: number | null = $state(0);
 	loadingMore = $state(false);
 	loading = $state(false);
@@ -31,6 +36,26 @@ class GridState {
 	#geohash: string | null = null;
 	#resolvingIds = new Set<number>();
 	#fetchToken = 0;
+
+	setFavorite({
+		profileId,
+		isFavorite,
+	}: {
+		profileId: number;
+		isFavorite: boolean;
+	}): void {
+		patchCachedProfile({ id: profileId, patch: { isFavorite } });
+		const index = this.items.findIndex((item) => item.id === profileId);
+		const item = this.items[index];
+		if (!item || item.type !== "rendered") return;
+		this.items = this.items.with(index, { ...item, isFavorite });
+	}
+
+	removeProfile(profileId: number): void {
+		const index = this.items.findIndex((item) => item.id === profileId);
+		if (index === -1) return;
+		this.items = this.items.toSpliced(index, 1);
+	}
 
 	load(geohash: string): void {
 		if (untrack(() => this.#geohash === geohash && this.items.length > 0))
@@ -88,14 +113,11 @@ class GridState {
 				pageNumber: this.nextPage,
 			});
 			if (token !== this.#fetchToken) return;
-			this.items.push(...result.items);
+			this.items = [...this.items, ...result.items];
 			this.nextPage = result.nextPage;
 		} catch (error) {
 			console.error(error);
-			showErrorToast({
-				label: "Failed to load more profiles",
-				error,
-			});
+			showErrorToast({ label: "Failed to load more profiles", error });
 		} finally {
 			this.loadingMore = false;
 		}
@@ -112,7 +134,7 @@ class GridState {
 			const cached = getCachedProfile(id);
 			if (cached) {
 				const idx = this.items.findIndex((i) => i.id === id);
-				if (idx !== -1) this.items[idx] = cached;
+				if (idx !== -1) this.items = this.items.with(idx, cached);
 				return;
 			}
 
@@ -122,16 +144,13 @@ class GridState {
 			if (idx === -1) return;
 			if (resolved) {
 				setCachedProfile(resolved);
-				this.items[idx] = resolved;
+				this.items = this.items.with(idx, resolved);
 			} else {
-				this.items.splice(idx, 1);
+				this.items = this.items.toSpliced(idx, 1);
 			}
 		} catch (error) {
 			console.error(id, error);
-			showErrorToast({
-				label: "Failed to load profile",
-				error,
-			});
+			showErrorToast({ label: "Failed to load profile", error });
 		} finally {
 			this.#resolvingIds.delete(id);
 		}
@@ -155,9 +174,7 @@ class GridState {
 					ageMin: filters?.age[0],
 					ageMax: filters?.age[1],
 				}),
-				...(filters?.genderEnabled && {
-					genders: filters?.genders,
-				}),
+				...(filters?.genderEnabled && { genders: filters?.genders }),
 				...(filters?.positionEnabled && {
 					sexualPositions: filters?.positions,
 				}),
@@ -173,9 +190,7 @@ class GridState {
 					filters?.photos.includes("has-face-pics") && {
 						faceOnly: true,
 					}),
-				...(filters?.tribesEnabled && {
-					tribes: filters?.tribes,
-				}),
+				...(filters?.tribesEnabled && { tribes: filters?.tribes }),
 				...(filters?.bodyTypesEnabled && {
 					bodyTypes: filters?.bodyTypes,
 				}),
@@ -184,8 +199,10 @@ class GridState {
 					heightCmMax: filters?.height[1],
 				}),
 				...(filters?.weightEnabled && {
-					weightGramsMin: filters?.weight[0] * 1000,
-					weightGramsMax: filters?.weight[1] * 1000,
+					weightGramsMin:
+						(filters?.weight[0] ?? WEIGHT_KG_MIN) * 1000,
+					weightGramsMax:
+						(filters?.weight[1] ?? WEIGHT_KG_MAX) * 1000,
 				}),
 				...(filters?.relationshipStatusesEnabled && {
 					relationshipStatuses: filters?.relationshipStatuses,
@@ -197,17 +214,14 @@ class GridState {
 				...(filters?.lookingForEnabled && {
 					lookingFor: filters?.lookingFor,
 				}),
-				...(filters?.meetAtEnabled && {
-					meetAt: filters?.meetAt,
-				}),
-				notRecentlyChatted: filters?.haventChattedTodayEnabled || undefined,
+				...(filters?.meetAtEnabled && { meetAt: filters?.meetAt }),
+				notRecentlyChatted:
+					filters?.haventChattedTodayEnabled || undefined,
 				...(filters?.healthPracticesEnabled && {
 					sexualHealth: filters?.healthPractices,
 				}),
 				...(filters?.tagsEnabled &&
-					filters?.tags && {
-						tags: filters?.tags,
-					}),
+					filters?.tags && { tags: filters?.tags }),
 				fresh: filters?.isFresh || undefined,
 			} satisfies z.infer<typeof cascadeV4QuerySchema>;
 			const result = await getGrid(query);
@@ -239,4 +253,13 @@ class GridState {
 
 export const gridState = new GridState();
 
-registerAccountCache(() => gridState.reset());
+registerAccountCache({ reset: () => gridState.reset() });
+reconciler.subscribe(() => gridState.refresh());
+onProfileEdit(({ profileId, patch }) => {
+	if (patch.isFavorite === undefined) return;
+	gridState.setFavorite({ profileId, isFavorite: patch.isFavorite });
+});
+onProfileViewabilityChange(({ profileId, viewable }) => {
+	if (viewable) void gridState.refresh();
+	else gridState.removeProfile(profileId);
+});

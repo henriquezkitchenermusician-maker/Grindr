@@ -7,7 +7,9 @@ const {
 	setConversationPinnedMock,
 	setConversationMutedMock,
 	showErrorToastMock,
-	showIncomingMessageToastMock,
+	onIncomingMessage,
+	currentPage,
+	singleColumn,
 	reconcileHandlers,
 	messageSentHandlers,
 } = vi.hoisted(() => ({
@@ -17,13 +19,15 @@ const {
 	setConversationPinnedMock: vi.fn(() => Promise.resolve()),
 	setConversationMutedMock: vi.fn(() => Promise.resolve()),
 	showErrorToastMock: vi.fn(),
-	showIncomingMessageToastMock: vi.fn(),
+	onIncomingMessage: vi.fn(),
+	currentPage: { route: { id: "/(protected)/chat" } },
+	singleColumn: { current: false },
 	reconcileHandlers: [] as (() => void | Promise<void>)[],
 	messageSentHandlers: [] as ((event: unknown) => void)[],
 }));
 
-vi.mock("$app/state", () => ({ page: { route: { id: "/(protected)/chat" } } }));
-vi.mock("$lib/api/error", () => ({ showErrorToast: showErrorToastMock }));
+vi.mock("$app/state", () => ({ page: currentPage }));
+vi.mock("$lib/api/error-toast", () => ({ showErrorToast: showErrorToastMock }));
 vi.mock("$lib/api/messaging/conversations", () => ({
 	getConversations: getConversationsMock,
 	markConversationAsRead: markConversationAsReadMock,
@@ -31,13 +35,7 @@ vi.mock("$lib/api/messaging/conversations", () => ({
 	setConversationPinned: setConversationPinnedMock,
 	setConversationMuted: setConversationMutedMock,
 }));
-vi.mock(
-	"$lib/components/incoming-message-toast/incoming-message-toast-manager",
-	() => ({ showIncomingMessageToast: showIncomingMessageToastMock }),
-);
-vi.mock("$lib/util/breakpoints.svelte", () => ({
-	below: () => ({ current: false }),
-}));
+vi.mock("$lib/util/breakpoints.svelte", () => ({ below: () => singleColumn }));
 vi.mock("$lib/util/reconcile", () => ({
 	reconciler: {
 		subscribe(handler: () => void | Promise<void>) {
@@ -142,15 +140,121 @@ const microtasks = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	currentPage.route.id = "/(protected)/chat";
+	singleColumn.current = false;
 	reconcileHandlers.length = 0;
 	messageSentHandlers.length = 0;
+});
+
+async function settled(state: ConversationsState) {
+	await vi.waitFor(() => expect(state.loading).toBe(false));
+}
+
+describe("ConversationsState initial load", () => {
+	it("reports a failed first load and clears it on retry", async () => {
+		getConversationsMock.mockRejectedValueOnce(new Error("offline"));
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage: vi.fn(),
+		});
+		await settled(state);
+
+		expect(state.error).toEqual(new Error("offline"));
+		expect(state.entries).toHaveLength(0);
+
+		getConversationsMock.mockResolvedValueOnce({
+			entries: [conversation("a:1", 1000)],
+			nextPage: null,
+		});
+		state.retry();
+		expect(state.loading).toBe(true);
+		await settled(state);
+
+		expect(state.error).toBeNull();
+		expect(state.entries).toHaveLength(1);
+	});
+
+	it("puts a rolled-back pin back in its original place", async () => {
+		getConversationsMock.mockResolvedValue({
+			entries: [conversation("a:1", 2000), conversation("b:2", 1000)],
+			nextPage: null,
+		});
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage: vi.fn(),
+		});
+		await settled(state);
+		const order = () =>
+			state.entries.map((entry) => entry.data.conversationId);
+		expect(order()).toEqual(["a:1", "b:2"]);
+
+		setConversationPinnedMock.mockRejectedValueOnce(new Error("nope"));
+		await state.setPinned({ conversationIds: ["b:2"], pinned: true });
+
+		expect(entryFor(state, "b:2").data.pinned).toBe(false);
+		expect(order()).toEqual(["a:1", "b:2"]);
+	});
+});
+
+describe("ConversationsState incoming-message handler (P6.3)", () => {
+	async function stateAwayFromTheInbox(
+		overrides: Partial<Conversation["data"]> = {},
+	) {
+		currentPage.route.id = "/(protected)/(navbar)";
+		singleColumn.current = true;
+		getConversationsMock.mockResolvedValue({
+			entries: [conversation("a:1", 1000, overrides)],
+			nextPage: null,
+		});
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
+		return state;
+	}
+
+	it("hands an incoming message to the handler with its conversation", async () => {
+		const state = await stateAwayFromTheInbox();
+		const message = incomingMessage("a:1", 2000, PEER_ID);
+
+		emitMessageSent(message);
+
+		expect(onIncomingMessage).toHaveBeenCalledExactlyOnceWith({
+			message,
+			conversation: entryFor(state, "a:1"),
+		});
+	});
+
+	it("stays silent for a muted conversation", async () => {
+		await stateAwayFromTheInbox({ muted: true });
+
+		emitMessageSent(incomingMessage("a:1", 2000, PEER_ID));
+
+		expect(onIncomingMessage).not.toHaveBeenCalled();
+	});
+
+	it("stays silent while the conversations list is on screen", async () => {
+		const state = await stateAwayFromTheInbox();
+		currentPage.route.id = "/(protected)/chat";
+		onIncomingMessage.mockClear();
+
+		emitMessageSent(incomingMessage("a:1", 2000, PEER_ID));
+		await microtasks();
+
+		expect(onIncomingMessage).not.toHaveBeenCalled();
+		expect(entryFor(state, "a:1").data.unreadCount).toBe(1);
+	});
 });
 
 describe("ConversationsState #syncLatest single-flight (P1.8)", () => {
 	it("coalesces concurrent ensureLoaded into one page-1 fetch", async () => {
 		getConversationsMock.mockResolvedValue({ entries: [], nextPage: null });
-		const state = new ConversationsState(OUR_ID);
-		await state.initial;
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
 		getConversationsMock.mockClear();
 
 		const gate = deferred<{
@@ -169,8 +273,11 @@ describe("ConversationsState #syncLatest single-flight (P1.8)", () => {
 
 	it("allows a fresh sync after the previous one settles", async () => {
 		getConversationsMock.mockResolvedValue({ entries: [], nextPage: null });
-		const state = new ConversationsState(OUR_ID);
-		await state.initial;
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
 		getConversationsMock.mockClear();
 
 		await state.ensureLoaded("a:1");
@@ -186,8 +293,11 @@ describe("ConversationsState markRead rollback (P1.9)", () => {
 			entries: [conversation("a:1", 1000, { unreadCount: 3 })],
 			nextPage: null,
 		});
-		const state = new ConversationsState(OUR_ID);
-		await state.initial;
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
 
 		const gate = deferred<void>();
 		markConversationAsReadMock.mockReturnValueOnce(gate.promise);
@@ -211,8 +321,11 @@ describe("ConversationsState epoch guards (P1.7)", () => {
 			entries: [conversation("a:1", 1000)],
 			nextPage: 2,
 		});
-		const state = new ConversationsState(OUR_ID);
-		await state.initial;
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
 		expect(state.nextPage).toBe(2);
 
 		const loadGate = deferred<{
@@ -242,18 +355,61 @@ describe("ConversationsState epoch guards (P1.7)", () => {
 			nextPage: number | null;
 		}>();
 		getConversationsMock.mockReturnValueOnce(initGate.promise);
-		const state = new ConversationsState(OUR_ID);
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
 
 		const reconcilePromise = reconcileHandlers[0]?.();
 		await microtasks();
 
 		getConversationsMock.mockRejectedValueOnce(new Error("network"));
 		initGate.resolve({ entries: [conversation("a:1", 1000)], nextPage: 2 });
-		await state.initial;
+		await settled(state);
 		await reconcilePromise;
 
-		expect(state.entries.map((e) => e.data.conversationId)).toEqual(["a:1"]);
+		expect(state.entries.map((e) => e.data.conversationId)).toEqual([
+			"a:1",
+		]);
 		expect(state.nextPage).toBe(2);
+	});
+
+	it("runs a reconcile asked for while another one is in flight", async () => {
+		getConversationsMock.mockResolvedValueOnce({
+			entries: [conversation("a:1", 1000)],
+			nextPage: null,
+		});
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
+
+		const gate = deferred<{
+			entries: Conversation[];
+			nextPage: number | null;
+		}>();
+		getConversationsMock.mockReturnValueOnce(gate.promise);
+		const first = reconcileHandlers[0]?.();
+		await microtasks();
+		await reconcileHandlers[0]?.();
+
+		expect(getConversationsMock).toHaveBeenCalledTimes(2);
+
+		getConversationsMock.mockResolvedValueOnce({
+			entries: [conversation("b:2", 3000)],
+			nextPage: null,
+		});
+		gate.resolve({ entries: [conversation("a:1", 1000)], nextPage: null });
+		await first;
+		await vi.waitFor(() =>
+			expect(getConversationsMock).toHaveBeenCalledTimes(3),
+		);
+		await vi.waitFor(() =>
+			expect(state.entries.map((e) => e.data.conversationId)).toEqual([
+				"b:2",
+			]),
+		);
 	});
 
 	it("discards a reconcile's stale writes when a loadMore supersedes it mid-paging", async () => {
@@ -261,8 +417,11 @@ describe("ConversationsState epoch guards (P1.7)", () => {
 			entries: [conversation("a:1", 1000)],
 			nextPage: 2,
 		});
-		const state = new ConversationsState(OUR_ID);
-		await state.initial;
+		const state = new ConversationsState({
+			ourProfileId: OUR_ID,
+			onIncomingMessage,
+		});
+		await settled(state);
 		expect(state.nextPage).toBe(2);
 
 		const reconcileGate = deferred<{

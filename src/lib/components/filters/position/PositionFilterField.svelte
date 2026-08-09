@@ -1,17 +1,15 @@
 <script lang="ts">
 	import type z from "zod";
 
-	import { filterPositionSchema } from "$lib/components/filters/filters";
 	import PositionFilterToggle from "$lib/components/filters/position/PositionFilterToggle.svelte";
+	import type { filterPositionSchema } from "$lib/model/browse/grid/filters";
 	import FilterBoolean from "../FilterBoolean.svelte";
 
 	let {
 		value = $bindable(),
 		checked = $bindable(),
-	}: {
-		value: z.infer<typeof filterPositionSchema>;
-		checked: boolean;
-	} = $props();
+	}: { value: z.infer<typeof filterPositionSchema>; checked: boolean } =
+		$props();
 </script>
 
 <div class="flex min-w-0 flex-col gap-2">

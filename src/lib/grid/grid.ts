@@ -1,7 +1,14 @@
-import { registerAccountCache } from "$lib/api/account-caches";
+import type z from "zod";
+
 import { getCascadeV4 } from "$lib/api/browse/grid";
+import { TtlCache } from "$lib/api/cache";
 import { getProfiles } from "$lib/api/users/profiles";
 import { now } from "$lib/util/clock";
+import type { cascadeV4ResponseFullProfileV1Schema } from "$lib/model/browse/grid/cascade/response/v4";
+
+type CascadeProfileData = z.infer<
+	typeof cascadeV4ResponseFullProfileV1Schema
+>["data"];
 
 function primaryImageHashes(url: string | null | undefined): string[] | null {
 	const hash = url?.split("/").pop();
@@ -30,76 +37,81 @@ export type LazyGridProfile = {
 
 export type GridProfile = RenderedGridProfile | LazyGridProfile;
 
+function lazyProfile(profile: {
+	profileId: number;
+	unreadCount: number;
+	isVisiting: boolean;
+}): LazyGridProfile {
+	return {
+		type: "lazy",
+		id: profile.profileId,
+		unread: profile.unreadCount,
+		isVisiting: profile.isVisiting,
+	};
+}
+
+// v4 sends `favorite`/`chatted` on every profile item; their absence marks a
+// base-shaped payload, which carries no photo to render from either.
+function gridProfile(profile: CascadeProfileData): GridProfile {
+	const { favorite, chatted } = profile;
+	if (favorite === undefined || chatted === undefined) {
+		return lazyProfile(profile);
+	}
+	return {
+		type: "rendered",
+		id: profile.profileId,
+		displayName: profile.displayName ?? null,
+		distance: profile.distanceMeters ?? null,
+		profilePhotosHashes: primaryImageHashes(profile.primaryImageUrl),
+		unread: profile.unreadCount ?? null,
+		onlineUntil: profile.onlineUntil ?? null,
+		isFavorite: favorite,
+		isVisiting: profile.isVisiting,
+		hasChattedInLast24Hrs: chatted,
+	};
+}
+
 export async function getGrid(query: Parameters<typeof getCascadeV4>[0]) {
 	const response = await getCascadeV4(query);
 	const items: GridProfile[] = [];
 
 	for (const item of response.items) {
-		if (item.type === "full_profile_v1" || item.type === "partial_profile_v1") {
-			const profile = item.data;
-			items.push({
-				type: "rendered",
-				id: profile.profileId,
-				displayName: profile.displayName ?? null,
-				distance: profile.distanceMeters ?? null,
-				profilePhotosHashes: primaryImageHashes(profile.primaryImageUrl),
-				unread: profile.unreadCount ?? null,
-				onlineUntil: profile.onlineUntil ?? null,
-				isFavorite: profile.favorite ?? false,
-				isVisiting: profile.isVisiting,
-				hasChattedInLast24Hrs: profile.chatted ?? false,
-			});
-		} else if (
+		if (
+			item.type === "full_profile_v1" ||
+			item.type === "partial_profile_v1" ||
 			item.type === "hidden_profile_v1" ||
 			item.type === "smart_boost_profile_v1"
 		) {
-			// Seems like a dead branch for now
-			const profile = item.data;
-			items.push({
-				type: "lazy",
-				id: profile.profileId,
-				unread: profile.unreadCount ?? null,
-				isVisiting: profile.isVisiting,
-			});
+			items.push(gridProfile(item.data));
 		} else if (item.type === "sponsored_profile_v1") {
-			// Seems like a dead branch for now
-			const profile = item.data.alternativeProfile;
-			items.push({
-				type: "lazy",
-				id: profile.profileId,
-				unread: profile.unreadCount ?? null,
-				isVisiting: profile.isVisiting,
-			});
+			items.push(gridProfile(item.data.alternativeProfile));
 		}
 	}
 
-	return {
-		items,
-		nextPage: response.nextPage,
-		shuffled: response.shuffled,
-	};
+	return { items, nextPage: response.nextPage, shuffled: response.shuffled };
 }
 
-const PROFILE_CACHE_TTL_MS = 60_000;
-
-const profileCache = new Map<
-	number,
-	{ profile: RenderedGridProfile; updatedAt: number }
->();
+const profileCache = new TtlCache<number, RenderedGridProfile>({
+	ttlMs: 60_000,
+});
 
 export function getCachedProfile(id: number): RenderedGridProfile | null {
-	const cached = profileCache.get(id);
-	if (!cached || now() - cached.updatedAt >= PROFILE_CACHE_TTL_MS) {
-		return null;
-	}
-	return cached.profile;
+	return profileCache.get(id);
 }
 
 export function setCachedProfile(profile: RenderedGridProfile): void {
-	profileCache.set(profile.id, { profile, updatedAt: now() });
+	profileCache.set(profile.id, profile);
 }
 
-registerAccountCache(() => profileCache.clear());
+export function patchCachedProfile({
+	id,
+	patch,
+}: {
+	id: number;
+	patch: Partial<RenderedGridProfile>;
+}): void {
+	profileCache.update(id, (profile) => ({ ...profile, ...patch }));
+}
 
 export async function resolveLazyProfile(
 	profile: LazyGridProfile,

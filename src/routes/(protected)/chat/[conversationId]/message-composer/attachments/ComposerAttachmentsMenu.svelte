@@ -15,11 +15,7 @@
 
 	const FULLSIZE_TABS: Tab[] = ["media"];
 
-	let {
-		open = $bindable(),
-	}: {
-		open: boolean;
-	} = $props();
+	let { open = $bindable() }: { open: boolean } = $props();
 
 	type Tab = "media" | "albums" | "location";
 
@@ -113,9 +109,7 @@
 					data-slot="sheet-panel"
 					class={[
 						" rounded-t-4xl border border-border bg-popover px-4 pb-20 shadow-xl",
-						{
-							"min-h-full": isFullsizeTab,
-						},
+						{ "min-h-full": isFullsizeTab },
 					]}
 				>
 					<div
@@ -132,10 +126,16 @@
 						/>
 					</Tabs.Content>
 					<Tabs.Content value="albums">
-						<ComposerUnimplementedTab label="Sharing albums" issue={33} />
+						<ComposerUnimplementedTab
+							label="Sharing albums"
+							issue={33}
+						/>
 					</Tabs.Content>
 					<Tabs.Content value="location">
-						<ComposerUnimplementedTab label="Sharing location" issue={35} />
+						<ComposerUnimplementedTab
+							label="Sharing location"
+							issue={35}
+						/>
 					</Tabs.Content>
 				</div>
 			</div>

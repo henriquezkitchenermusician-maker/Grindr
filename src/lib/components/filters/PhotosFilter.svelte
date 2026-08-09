@@ -3,16 +3,14 @@
 	import type z from "zod";
 
 	import * as ToggleGroup from "$lib/components/ui/toggle-group";
-	import type { filterPhotosSchema } from "$lib/components/filters/filters";
+	import type { filterPhotosSchema } from "$lib/model/browse/grid/filters";
 	import FilterBoolean from "./FilterBoolean.svelte";
 
 	let {
 		checked = $bindable(),
 		value = $bindable(),
-	}: {
-		checked: boolean;
-		value: z.infer<typeof filterPhotosSchema>;
-	} = $props();
+	}: { checked: boolean; value: z.infer<typeof filterPhotosSchema> } =
+		$props();
 </script>
 
 <div class="flex min-w-0 flex-col gap-2">

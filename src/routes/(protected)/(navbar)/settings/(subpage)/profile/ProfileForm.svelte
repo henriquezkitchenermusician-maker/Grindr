@@ -1,5 +1,4 @@
 <script lang="ts">
-	import isEqual from "lodash-es/isEqual";
 	import {
 		FacebookLogoIcon,
 		InstagramLogoIcon,
@@ -10,32 +9,20 @@
 	import { expoOut } from "svelte/easing";
 	import { fly } from "svelte/transition";
 
-	import { showErrorToast } from "$lib/api/error";
+	import { showErrorToast } from "$lib/api/error-toast";
+	import { ProfileModerationError } from "$lib/api/users/profile-moderation";
 	import {
 		deleteProfilePhotos,
-		ProfileModerationError,
 		type ProfileUpdate,
 		updateOwnProfile,
 	} from "$lib/api/users/profiles";
 	import { Button } from "$lib/components/ui/button";
 	import { WheelPicker } from "$lib/components/ui/carousel";
 	import { Spinner } from "$lib/components/ui/spinner";
-	import {
-		acceptNSFWPics,
-		bodyTypes,
-		ethnicities,
-		type Gender,
-		healthPractices,
-		hivStatuses,
-		lookingFor as lookingForLabels,
-		meetAt as meetAtLabels,
-		type Profile,
-		type Pronoun,
-		relationshipStatuses,
-		sexualPositions,
-		tribes,
-		vaccines as vaccineLabels,
-	} from "$lib/model/users/profiles";
+	import { type Profile } from "$lib/model/users/profiles";
+	import { deepEqual } from "$lib/util/deep-equal";
+	import type { Gender } from "$lib/model/users/genders";
+	import type { Pronoun } from "$lib/model/users/pronouns";
 	import type { ProfileTagsResponse } from "$lib/model/users/tags";
 	import ComboField from "./fields/ComboField.svelte";
 	import DateField from "./fields/DateField.svelte";
@@ -49,13 +36,25 @@
 	import TextField from "./fields/TextField.svelte";
 	import {
 		ageRange,
+		bodyTypeOptions,
+		buildGenderOptions,
+		buildPronounOptions,
+		buildTagOptions,
+		ethnicityOptions,
 		fieldLimits,
+		healthOptions,
 		heightCmRange,
+		hivOptions,
+		lookingForOptions,
 		maxProfileGenders,
 		maxProfilePronouns,
 		maxProfileTags,
-		optionsFromMap,
-		primaryGenderOrder,
+		meetAtOptions,
+		nsfwOptions,
+		positionOptions,
+		relationshipOptions,
+		tribeOptions,
+		vaccineOptions,
 		weightKgRange,
 	} from "./options";
 	import ProfilePicturesUpload from "./ProfilePicturesUpload.svelte";
@@ -74,68 +73,16 @@
 		ourProfileId: number;
 	} = $props();
 
-	const ethnicityOptions = optionsFromMap(ethnicities);
-	const relationshipOptions = optionsFromMap(relationshipStatuses);
-	const bodyTypeOptions = optionsFromMap(bodyTypes);
-	const hivOptions = optionsFromMap(hivStatuses);
-	const positionOptions = optionsFromMap(sexualPositions);
-	const nsfwOptions = optionsFromMap(acceptNSFWPics);
-	const lookingForOptions = optionsFromMap(lookingForLabels);
-	const tribeOptions = optionsFromMap(tribes);
-	const meetAtOptions = optionsFromMap(meetAtLabels);
-	const vaccineOptions = optionsFromMap(vaccineLabels);
-	const healthOptions = optionsFromMap(healthPractices);
-
-	const genderById = untrack(
-		() => new Map(genders.map((gender) => [gender.genderId, gender])),
+	const {
+		options: genderOptions,
+		resolveLabel: resolveGenderLabel,
+		exclusions: genderExclusions,
+	} = untrack(() => buildGenderOptions(genders));
+	const { options: pronounOptions, resolveLabel: resolvePronounLabel } =
+		untrack(() => buildPronounOptions(pronouns));
+	const { options: tagOptions, resolveLabel: resolveTagLabel } = untrack(() =>
+		buildTagOptions(tags),
 	);
-	const primaryGenderRank = (id: number) => {
-		const index = primaryGenderOrder.indexOf(id);
-		return index === -1 ? Infinity : index;
-	};
-	const genderOptions = untrack(() =>
-		genders
-			.filter((gender) => (gender.displayGroup ?? 0) > 0)
-			.sort(
-				(a, b) =>
-					primaryGenderRank(a.genderId) - primaryGenderRank(b.genderId) ||
-					(a.sortProfile ?? Infinity) - (b.sortProfile ?? Infinity) ||
-					a.genderId - b.genderId,
-			)
-			.map((gender) => ({ value: gender.genderId, label: gender.gender })),
-	);
-	const resolveGenderLabel = (id: number) => genderById.get(id)?.gender;
-	const genderExclusions = (id: number) =>
-		genderById.get(id)?.excludeOnProfileSelection ?? [];
-
-	const pronounById = untrack(
-		() => new Map(pronouns.map((pronoun) => [pronoun.pronounId, pronoun])),
-	);
-	const pronounOptions = untrack(() =>
-		pronouns.map((pronoun) => ({
-			value: pronoun.pronounId,
-			label: pronoun.pronoun,
-		})),
-	);
-	const resolvePronounLabel = (id: number) => pronounById.get(id)?.pronoun;
-
-	const tagTextByKey = untrack(() => {
-		const map = new Map<string, string>();
-		for (const language of tags) {
-			for (const category of language.categoryCollection) {
-				for (const tag of category.tags) {
-					if (!map.has(tag.key)) map.set(tag.key, tag.text);
-				}
-			}
-		}
-		return map;
-	});
-	const tagOptions = untrack(() =>
-		[...tagTextByKey]
-			.map(([key, text]) => ({ value: key, label: text }))
-			.sort((a, b) => a.label.localeCompare(b.label)),
-	);
-	const resolveTagLabel = (key: string) => tagTextByKey.get(key);
 
 	const initial = untrack(() => $state.snapshot(profile));
 
@@ -214,12 +161,13 @@
 		};
 	}
 
-	let savedForm = $state(formSnapshot());
-	const dirty = $derived(!isEqual(formSnapshot(), savedForm));
+	let savedForm = $state.raw(formSnapshot());
+	const dirty = $derived(!deepEqual(formSnapshot(), savedForm));
 
 	async function save() {
 		if (saving || aboutMeOverLimit || !dirty) return;
 		saving = true;
+		const sent = formSnapshot();
 		const body = {
 			displayName: displayName.trim() || null,
 			aboutMe: aboutMe.trim() || null,
@@ -259,10 +207,16 @@
 		);
 		try {
 			await Promise.all([
-				updateOwnProfile(ourProfileId, body),
-				deleteProfilePhotos(ourProfileId, removedHashes),
+				updateOwnProfile({
+					cacheProfileId: ourProfileId,
+					profile: body,
+				}),
+				deleteProfilePhotos({
+					cacheProfileId: ourProfileId,
+					mediaHashes: removedHashes,
+				}),
 			]);
-			savedForm = formSnapshot();
+			savedForm = sent;
 			toast.success("Profile updated");
 		} catch (error) {
 			if (error instanceof ProfileModerationError) {

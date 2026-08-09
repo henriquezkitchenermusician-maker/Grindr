@@ -1,7 +1,9 @@
 pub mod api;
+mod appearance;
 mod error;
 #[cfg_attr(debug_assertions, allow(dead_code))]
 mod logging;
+pub mod media;
 mod state;
 mod storage;
 
@@ -41,6 +43,19 @@ fn open_grind_platform_plugin<R: tauri::Runtime>(
 			r#"window.__OPEN_GRIND_PLATFORM = "{OPEN_GRIND_PLATFORM}";"#
 		))
 		.build()
+}
+
+fn is_app_url(url: &tauri::Url) -> bool {
+	let host = url.host_str();
+	match url.scheme() {
+		"tauri" => host == Some("localhost"),
+		"http" | "https" => {
+			host == Some("tauri.localhost")
+				|| (cfg!(debug_assertions)
+					&& matches!(host, Some("localhost") | Some("127.0.0.1")))
+		}
+		_ => false,
+	}
 }
 
 // macOS reports a WebKit build number that doesn't track Safari versions
@@ -109,6 +124,8 @@ pub fn run() {
         .manage(AppState {
             client: OnceLock::new(),
         })
+        .manage(media::MediaProxy::default())
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, media::handle)
         .invoke_handler(tauri::generate_handler![
             api::auth::login,
             api::auth::login_with_google,
@@ -138,9 +155,12 @@ pub fn run() {
                 .cloned()
                 .collect();
             for window in deferred {
-                tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?
-                    .user_agent(&user_agent)
-                    .build()?;
+                let window =
+                    tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?
+                        .user_agent(&user_agent)
+                        .on_navigation(is_app_url)
+                        .build()?;
+                appearance::unlock_visual_effects(&window);
             }
 
             #[cfg(desktop)]
@@ -161,20 +181,7 @@ pub fn run() {
 
             storage::init_keyring();
 
-            let device = match DeviceStorage::load() {
-                Ok(Some(d)) => d,
-                Ok(None) => {
-                    let d = grindr::DeviceInfo::generate();
-                    if let Err(e) = DeviceStorage::save(&d) {
-                        tracing::error!("[setup] could not persist device info: {e}");
-                    }
-                    d
-                }
-                Err(e) => {
-                    tracing::warn!("[setup] could not load device info, regenerating: {e}");
-                    grindr::DeviceInfo::generate()
-                }
-            };
+            let device = DeviceStorage::load_or_create();
 
             let session = match AuthStorage::get_session() {
                 Ok(s) => s,
@@ -204,13 +211,10 @@ pub fn run() {
             }
 
             {
-                let saved_key = SigningKeyStorage::load().unwrap_or(None);
                 let client = client.clone();
                 let mut key_rx = client.signing_key_receiver();
                 tauri::async_runtime::spawn(async move {
-                    if let Some(k) = saved_key {
-                        client.restore_signing_key(k).await;
-                    }
+                    SigningKeyStorage::restore(&client).await;
                     while key_rx.changed().await.is_ok() {
                         match key_rx.borrow().clone() {
                             Some(k) => {
@@ -236,4 +240,37 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn allows(url: &str) -> bool {
+		is_app_url(&tauri::Url::parse(url).unwrap())
+	}
+
+	#[test]
+	fn admits_the_bundled_asset_origins() {
+		assert!(allows("tauri://localhost/"));
+		assert!(allows("tauri://localhost/chat/1"));
+		assert!(allows("http://tauri.localhost/"));
+		assert!(allows("https://tauri.localhost/"));
+	}
+
+	#[test]
+	fn refuses_navigation_away_from_the_app() {
+		for url in [
+			"https://example.org/",
+			"tauri://example.org/",
+			"http://tauri.localhost.example.org/",
+			"file:///etc/passwd",
+			"javascript:alert(1)",
+			"data:text/html,<script>1</script>",
+			"ogmedia://localhost/aHR0cHM6Ly9leGFtcGxlLm9yZw",
+			"http://ogmedia.localhost/aHR0cHM6Ly9leGFtcGxlLm9yZw",
+		] {
+			assert!(!allows(url), "{url} must not load in the main webview");
+		}
+	}
 }

@@ -8,7 +8,10 @@ const { callMethodMock, connectedHandlers, droppedHandlers } = vi.hoisted(
 	}),
 );
 
-vi.mock("$lib/api", () => ({ callMethod: callMethodMock }));
+vi.mock("$lib/api/methods", async (importOriginal) => ({
+	...(await importOriginal<typeof import("$lib/api/methods")>()),
+	callMethod: callMethodMock,
+}));
 vi.mock("$lib/ws.svelte", () => ({
 	ws: {
 		onConnected(handler: () => void) {
@@ -22,14 +25,27 @@ vi.mock("$lib/ws.svelte", () => ({
 	},
 }));
 
+const flushMockSubscriptions = () => vi.advanceTimersByTimeAsync(0);
+
 async function freshReconciler() {
 	connectedHandlers.length = 0;
 	droppedHandlers.length = 0;
 	vi.resetModules();
 	const { reconciler } = await import("./reconcile");
-	// The constructor subscribes through promise-returning mocks.
-	await vi.advanceTimersByTimeAsync(0);
+	await flushMockSubscriptions();
 	return reconciler;
+}
+
+function dropEvents(skipped: number) {
+	const [handler] = droppedHandlers;
+	if (!handler) throw new Error("nothing subscribed to ws:events-dropped");
+	handler(skipped);
+}
+
+function reconnect() {
+	const [handler] = connectedHandlers;
+	if (!handler) throw new Error("nothing subscribed to ws:connected");
+	handler();
 }
 
 describe("Reconciler resync after dropped websocket events", () => {
@@ -48,8 +64,8 @@ describe("Reconciler resync after dropped websocket events", () => {
 		const handler = vi.fn();
 		reconciler.subscribe(handler);
 
-		droppedHandlers[0](3);
-		await vi.advanceTimersByTimeAsync(0);
+		dropEvents(3);
+		await flushMockSubscriptions();
 
 		expect(handler).toHaveBeenCalledTimes(1);
 	});
@@ -59,13 +75,13 @@ describe("Reconciler resync after dropped websocket events", () => {
 		const handler = vi.fn();
 		reconciler.subscribe(handler);
 
-		droppedHandlers[0](3);
-		await vi.advanceTimersByTimeAsync(0);
+		dropEvents(3);
+		await flushMockSubscriptions();
 		expect(handler).toHaveBeenCalledTimes(1);
 
 		await vi.advanceTimersByTimeAsync(1200);
-		droppedHandlers[0](7);
-		await vi.advanceTimersByTimeAsync(0);
+		dropEvents(7);
+		await flushMockSubscriptions();
 		expect(handler).toHaveBeenCalledTimes(1);
 
 		await vi.advanceTimersByTimeAsync(800);
@@ -77,36 +93,35 @@ describe("Reconciler resync after dropped websocket events", () => {
 		const handler = vi.fn();
 		reconciler.subscribe(handler);
 
-		droppedHandlers[0](3);
-		await vi.advanceTimersByTimeAsync(0);
+		dropEvents(3);
+		await flushMockSubscriptions();
 		expect(handler).toHaveBeenCalledTimes(1);
 
 		await vi.advanceTimersByTimeAsync(1000);
-		droppedHandlers[0](256);
-		droppedHandlers[0](256);
-		droppedHandlers[0](256);
+		dropEvents(256);
+		dropEvents(256);
+		dropEvents(256);
 
 		await vi.advanceTimersByTimeAsync(2000);
 		expect(handler).toHaveBeenCalledTimes(2);
 	});
 
-	it("skips the pending resync when another trigger reconciles after the drop", async () => {
+	it("skips the pending resync when a reconnect reconcile lands after the drop and already covers it", async () => {
 		const reconciler = await freshReconciler();
 		const handler = vi.fn();
 		reconciler.subscribe(handler);
 
-		droppedHandlers[0](3);
-		await vi.advanceTimersByTimeAsync(0);
+		dropEvents(3);
+		await flushMockSubscriptions();
 		expect(handler).toHaveBeenCalledTimes(1);
 
 		await vi.advanceTimersByTimeAsync(1200);
-		droppedHandlers[0](7);
+		dropEvents(7);
 
-		// A reconnect reconcile lands after the drop, so it already covers it.
 		await vi.advanceTimersByTimeAsync(800);
-		connectedHandlers[0]();
-		connectedHandlers[0]();
-		await vi.advanceTimersByTimeAsync(0);
+		reconnect();
+		reconnect();
+		await flushMockSubscriptions();
 		expect(handler).toHaveBeenCalledTimes(2);
 
 		await vi.advanceTimersByTimeAsync(2000);

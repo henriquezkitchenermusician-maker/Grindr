@@ -1,153 +1,20 @@
-import js from "@eslint/js";
-import prettier from "eslint-config-prettier";
-import betterTailwindcss from "eslint-plugin-better-tailwindcss";
-import perfectionist from "eslint-plugin-perfectionist";
-import svelte from "eslint-plugin-svelte";
+import { sveltekit } from "@opengrind/config/eslint/svelte";
 import { defineConfig } from "eslint/config";
-import globals from "globals";
-import path from "node:path";
-import ts from "typescript-eslint";
 
 import svelteConfig from "./svelte.config.js";
 
-const progress = {
-	rules: {
-		file: {
-			create(context) {
-				if (process.env.ESLINT_PROGRESS)
-					process.stderr.write(
-						`  lint ${path.relative(context.cwd, context.filename)}\n`,
-					);
-				return {};
-			},
-		},
-	},
-};
-
 export default defineConfig(
-	{
+	...sveltekit({
+		svelteConfig,
+		tailwindEntry: "src/layout.css",
+		vendoredGlob: "src/lib/components/ui/**",
 		ignores: [
-			"build/",
-			".svelte-kit/",
 			"src-tauri/",
 			"reverse/",
 			"docs/",
 			"contrib/",
-			"coverage/",
 			"static/",
 			"scripts/",
-			"test-results/",
-			"playwright-report/",
 		],
-	},
-	js.configs.recommended,
-	...ts.configs.recommendedTypeChecked,
-	prettier,
-	svelte.configs.prettier,
-	{
-		plugins: {
-			perfectionist,
-			progress,
-		},
-		languageOptions: {
-			globals: globals.node,
-			parserOptions: {
-				projectService: true,
-			},
-		},
-		rules: {
-			"progress/file": "warn",
-			"no-undef": "off",
-			"@typescript-eslint/require-array-sort-compare": [
-				"error",
-				{ ignoreStringArrays: true },
-			],
-			"perfectionist/sort-imports": [
-				"error",
-				{
-					internalPattern: ["^\\$lib/"],
-					newlinesBetween: 0,
-					groups: [
-						["value-external", "value-builtin"],
-						["type-external", "type-builtin"],
-						{ newlinesBetween: 1 },
-						"value-internal",
-						"type-internal",
-						[
-							"value-parent",
-							"value-sibling",
-							"value-index",
-							"type-parent",
-							"type-sibling",
-							"type-index",
-						],
-						"ts-equals-import",
-						"unknown",
-					],
-				},
-			],
-			"perfectionist/sort-named-imports": "error",
-			"@typescript-eslint/no-unsafe-assignment": "off",
-			"@typescript-eslint/no-unsafe-call": "off",
-			"@typescript-eslint/no-unsafe-member-access": "off",
-			"@typescript-eslint/no-unsafe-argument": "off",
-			"@typescript-eslint/no-unsafe-return": "off",
-			"@typescript-eslint/no-redundant-type-constituents": "off",
-		},
-	},
-	{
-		files: ["**/*.svelte", "**/*.svelte.ts", "**/*.svelte.js"],
-		languageOptions: {
-			parserOptions: {
-				projectService: true,
-				extraFileExtensions: [".svelte"],
-				parser: ts.parser,
-				svelteConfig,
-			},
-		},
-		rules: {
-			"@typescript-eslint/require-array-sort-compare": [
-				"error",
-				{ ignoreStringArrays: true },
-			],
-		},
-	},
-	{
-		files: ["src/routes/**/*.svelte"],
-		plugins: {
-			"better-tailwindcss": betterTailwindcss,
-		},
-		settings: {
-			"better-tailwindcss": {
-				entryPoint: "src/layout.css",
-			},
-		},
-		rules: {
-			"better-tailwindcss/no-restricted-classes": [
-				"warn",
-				{
-					restrict: [
-						{
-							pattern: "-\\[[0-9.]+(px|rem|em)\\]",
-							message:
-								"Raw dimensional value in a route — promote it to a semantic token in src/layout.css (@theme).",
-						},
-						{
-							pattern: "\\[&",
-							message:
-								"Child-selector styling belongs in a component (src/lib), not a page.",
-						},
-						{
-							pattern: "\\[#",
-							message: "Hardcoded color — use a semantic color token.",
-						},
-					],
-				},
-			],
-		},
-	},
-	{
-		files: ["**/*.config.{js,ts,mjs,cjs}", "*.config.{js,ts,mjs,cjs}"],
-		...ts.configs.disableTypeChecked,
-	},
+	}),
 );

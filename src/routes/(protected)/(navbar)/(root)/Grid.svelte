@@ -1,72 +1,67 @@
 <script lang="ts">
 	import ApiErrorDisplay from "$lib/components/feedback/ApiErrorDisplay.svelte";
-	import { nearestScrollableAncestor } from "$lib/components/feedback/refresh/scroll-chain";
 	import { gridState } from "$lib/grid/grid-state.svelte";
+	import { observeIntersection } from "$lib/util/observe-intersection";
+	import { virtualGrid } from "$lib/util/virtual-grid.svelte";
 	import type { GridProfile } from "$lib/grid/grid";
 	import EmptyGrid from "./EmptyGrid.svelte";
+	import GridCellSkeleton from "./GridCellSkeleton.svelte";
 	import GridProfileMiniCard from "./GridProfileMiniCard.svelte";
 
-	let {
-		geohash,
-	}: {
-		geohash: string;
-	} = $props();
+	const PAGE_SKELETONS = 20;
+
+	let { geohash }: { geohash: string } = $props();
+
+	let gridElement: HTMLElement | null = $state(null);
 
 	const gridProfiles = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- built and spread inside this $derived, never mutated afterwards
 		const byId = new Map<number, GridProfile>();
 		for (const item of gridState.items) {
 			const existing = byId.get(item.id);
-			if (!existing || (existing.type === "lazy" && item.type === "rendered")) {
+			if (
+				!existing ||
+				(existing.type === "lazy" && item.type === "rendered")
+			) {
 				byId.set(item.id, item);
 			}
 		}
 		return [...byId.values()];
 	});
 
+	const pendingSkeletons = $derived(
+		gridState.loadingMore ? PAGE_SKELETONS : 0,
+	);
+	const view = virtualGrid({
+		grid: () => gridElement,
+		count: () => gridProfiles.length + pendingSkeletons,
+	});
+	const visibleProfiles = $derived(
+		gridProfiles.slice(view.startIndex, view.endIndex),
+	);
+	const visibleSkeletons = $derived(
+		Math.max(
+			0,
+			view.endIndex - Math.max(view.startIndex, gridProfiles.length),
+		),
+	);
+
 	$effect.pre(() => {
 		gridState.load(geohash);
 	});
-
-	function observeSentinel(node: HTMLElement) {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting)
-					gridState.loadMore().catch((error) => console.error(error));
-			},
-			{ root: nearestScrollableAncestor(node), rootMargin: "400px" },
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			},
-		};
-	}
-
-	function observeLazy(node: HTMLElement, params: { id: number }) {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0].isIntersecting) {
-					gridState
-						.resolveProfile(params.id)
-						.catch((error) => console.error(error));
-				}
-			},
-			{ root: nearestScrollableAncestor(node), rootMargin: "200px" },
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			},
-		};
-	}
 </script>
 
-<div class="photo-grid relative">
+<div
+	bind:this={gridElement}
+	class="photo-grid relative"
+	style:padding-top="{view.paddingTopPx}px"
+	style:padding-bottom="{view.paddingBottomPx}px"
+	data-rows-above={view.hasRowsAbove || undefined}
+	data-rows-below={view.hasRowsBelow || undefined}
+>
 	{#if gridState.loading}
-		{#each Array.from({ length: 20 })}
-			<div class="aspect-square animate-pulse bg-stone-700"></div>
+		{#each Array.from({ length: PAGE_SKELETONS })}
+			<GridCellSkeleton />
 		{/each}
 	{:else if gridState.error}
 		<div class="col-span-full flex p-4">
@@ -77,7 +72,10 @@
 			/>
 		</div>
 	{:else}
-		{#each gridProfiles as item (item.id)}
+		{#if gridProfiles.length === 0}
+			<EmptyGrid />
+		{/if}
+		{#each visibleProfiles as item (item.id)}
 			{#if item.type === "rendered"}
 				<GridProfileMiniCard
 					id={item.id}
@@ -93,23 +91,30 @@
 					})) ?? []}
 				/>
 			{:else}
-				<div
-					class="aspect-square animate-pulse bg-stone-700"
-					use:observeLazy={{ id: item.id }}
-				></div>
+				<GridCellSkeleton
+					onVisible={() => {
+						gridState
+							.resolveProfile(item.id)
+							.catch((error) => console.error(error));
+					}}
+				/>
 			{/if}
-		{:else}
-			<EmptyGrid />
 		{/each}
-		{#if gridState.loadingMore}
-			{#each Array.from({ length: 20 })}
-				<div class="aspect-square animate-pulse bg-stone-700"></div>
-			{/each}
-		{/if}
+		{#each Array.from({ length: visibleSkeletons })}
+			<GridCellSkeleton />
+		{/each}
 		{#if gridState.nextPage !== 0 && gridState.nextPage !== null}
 			<div
 				class="pointer-events-none absolute inset-x-0 bottom-0 h-px"
-				use:observeSentinel
+				use:observeIntersection={{
+					handle: () => {
+						gridState
+							.loadMore()
+							.catch((error) => console.error(error));
+					},
+					root: "scroller",
+					rootMargin: "400px",
+				}}
 			></div>
 		{/if}
 	{/if}

@@ -3,6 +3,7 @@
 	import { expoOut } from "svelte/easing";
 	import { scale } from "svelte/transition";
 
+	import { observeIntersection } from "$lib/util/observe-intersection";
 	import type { ApiResponseMessage } from "$lib/model/messaging/messages";
 	import AlbumMessage from "./AlbumMessage.svelte";
 	import { setMessageContext } from "./context";
@@ -56,12 +57,8 @@
 
 	let contextMenuOpen:
 		| false
-		| {
-				x: number;
-				y: number;
-				width: number;
-				height: number;
-		  } = $state(false);
+		| { x: number; y: number; width: number; height: number } =
+		$state(false);
 	let messageElement: HTMLElement | null = $state(null);
 
 	function setRef(el: HTMLElement | null) {
@@ -117,25 +114,6 @@
 	}
 
 	let contextMenu: HTMLDialogElement | null = $state(null);
-
-	function observeRead(node: HTMLElement) {
-		if (!onVisible) return {};
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (entries[0]?.isIntersecting) {
-					onVisible();
-					observer.disconnect();
-				}
-			},
-			{ threshold: 0 },
-		);
-		observer.observe(node);
-		return {
-			destroy() {
-				observer.disconnect();
-			},
-		};
-	}
 </script>
 
 {#snippet adornments()}
@@ -150,15 +128,16 @@
 	>
 		{#if message.reactions.length > 0}
 			{@const reactionMap = message.reactions.reduce(
-				(m, r) => m.set(r.reactionType, (m.get(r.reactionType) ?? 0) + 1),
+				(m, r) =>
+					m.set(r.reactionType, (m.get(r.reactionType) ?? 0) + 1),
 				new Map<number, number>(),
 			)}
 			<div
 				class="mt-1 mr-1 flex items-center gap-0.5"
 				transition:scale={{ duration: 150, easing: expoOut }}
 			>
-				{#each reactionMap.entries() as [type, count]}
-					<Reaction type={Number(type)} {count} />
+				{#each reactionMap.entries() as [type] (type)}
+					<Reaction type={Number(type)} />
 				{/each}
 			</div>
 		{/if}
@@ -187,14 +166,7 @@
 	</MessageWrapper>
 {/snippet}
 
-<div
-	class={[
-		"relative z-1 flex flex-col gap-0.5",
-		{
-			"mt-3": firstInStack,
-		},
-	]}
->
+<div class={["relative z-1 flex flex-col gap-0.5", { "mt-3": firstInStack }]}>
 	{#if firstInStack && dayStart !== undefined}
 		<MessageDateGroup {dayStart} />
 	{/if}
@@ -205,7 +177,6 @@
 		}}
 		role="button"
 		tabindex="0"
-		aria-label="Message"
 		ondblclick={(event) => {
 			const selection = window.getSelection();
 			if (
@@ -231,7 +202,7 @@
 			onContextMenu();
 		}}
 		style:visibility={contextMenuOpen ? "hidden" : undefined}
-		use:observeRead
+		use:observeIntersection={{ handle: onVisible, once: true }}
 	>
 		{@render content()}
 	</div>

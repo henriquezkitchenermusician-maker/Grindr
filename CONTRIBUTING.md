@@ -3,20 +3,23 @@
 Thanks for considering contributing to Open Grind.
 
 - [Contributing to Open Grind](#contributing-to-open-grind)
-  - [Contribution guidelines](#contribution-guidelines)
-  - [Getting started](#getting-started)
-    - [Development environment](#development-environment)
-    - [Project structure](#project-structure)
-    - [Interacting with API](#interacting-with-api)
-    - [Checks and tests](#checks-and-tests)
+    - [Contribution guidelines](#contribution-guidelines)
+    - [Getting started](#getting-started)
+        - [Development environment](#development-environment)
+        - [Project structure](#project-structure)
+        - [Interacting with API](#interacting-with-api)
+        - [Checks and tests](#checks-and-tests)
+        - [Where state lives](#where-state-lives)
+        - [Function parameters](#function-parameters)
     - [Submitting your changes](#submitting-your-changes)
-  - [Inclusion in GOVERNANCE.md](#inclusion-in-governancemd)
+        - [Inclusion in GOVERNANCE.md](#inclusion-in-governancemd)
 
 ## Contribution guidelines
 
 AI-generated pull requests are not allowed. AI-assisted code is allowed. All contributions must be aligned with [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 - Use American English spelling
+- Internationalization is out of scope for now (see [#106](https://git.opengrind.org/open-grind/open-grind/issues/106)), so keep interface strings inline in American English, no translation layer and no partial translations
 - Use [Phosphor Icons](https://phosphoricons.com) whenever possible
 
 ## Getting started
@@ -38,21 +41,21 @@ Projects reference:
 
 1. Clone repository with submodules: `git clone --recurse-submodules ssh://git@git.opengrind.org/open-grind/open-grind.git`
 2. Install prerequisites:
-   - [Bun](https://bun.sh)
-   - [Rust](https://rustup.rs)
-   - [Tauri CLI](https://tauri.app/start/prerequisites/)
+    - [Bun](https://bun.sh)
+    - [Rust](https://rustup.rs)
+    - [Tauri CLI](https://tauri.app/start/prerequisites/)
 3. Install dependencies:
-   ```bash
-   bun ci
-   ```
+    ```bash
+    bun ci
+    ```
 4. Then start a dev server:
 
-   ```bash
-   bun dev
-   ```
+    ```bash
+    bun dev
+    ```
 
-   - Run with `PUBLIC_ENABLE_BLUR_EFFECTS=1` to blur all avatars in the app.
-   - Run with `PUBLIC_ENABLE_DEMO=1` to switch to SFW mock data.
+    - Run with `PUBLIC_ENABLE_BLUR_EFFECTS=1` to blur all avatars in the app.
+    - Run with `PUBLIC_ENABLE_DEMO=1` to switch to SFW mock data.
 
 ### Project structure
 
@@ -77,7 +80,8 @@ const securityHeaders = {
 	"Accept-Language": "en-US",
 	requireRealDeviceInfo: "true",
 	"L-Time-Zone": "Europe/Madrid",
-	"User-Agent": "grindr3/25.20.0.147239;147239;Free;Android 13;Pixel 7;Google",
+	"User-Agent":
+		"grindr3/25.20.0.147239;147239;Free;Android 13;Pixel 7;Google",
 	"L-Device-Info":
 		"1fAf9fB2aFfd47Fd;GLOBAL;2;3543028095;2400x1080;a1b2c3d4-e5f6-7890-abcd-ef1234567890",
 	// modify L-Device-Info values randomly if you're getting ACCOUNT_BANNED at login stage
@@ -86,10 +90,7 @@ const securityHeaders = {
 
 const req = await fetch("https://grindr.mobi/v8/sessions", {
 	method: "POST",
-	headers: {
-		Accept: "application/json",
-		...securityHeaders,
-	},
+	headers: { Accept: "application/json", ...securityHeaders },
 	body: JSON.stringify({
 		email: "yourmail@example.org",
 		password:
@@ -112,13 +113,14 @@ Before opening a pull request, run the same checks CI runs:
 
 - `bun run lint` — ESLint. Formatting is separate: `bun run format` (Prettier).
 - `bun run check` — `svelte-check` type checking.
+- `bun run check:deps` — `cargo deny` (advisories, licenses, duplicate and unknown-source crates) plus `bun audit` over every workspace. Needs [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) on `PATH`; CI runs it on a weekly schedule and on any pull request that touches a manifest or lockfile.
 - `bun run test` — frontend unit tests (Vitest) and Rust backend tests (`cargo test`) together. Individually: `bun run test:unit` and `bun run test:rust`.
 
 End-to-end tests are a separate tier:
 
 - `bun run test:e2e` — Playwright. One-time setup: `bunx playwright install chromium`. It drives the web build and runs the browser serially, which is why it stays out of `bun run test`.
 
-`bun ci` also installs a pre-commit hook (husky + lint-staged) that runs over staged files only:
+`bun ci` also installs a pre-commit hook ([lefthook](https://lefthook.dev/), configured in [lefthook.yml](./lefthook.yml)) that runs over staged files only:
 
 - `*.{js,mjs,ts,svelte}` — Prettier, then ESLint with `--fix`
 - `*.{json,md,yml,yaml,css,html}` — Prettier
@@ -127,7 +129,27 @@ End-to-end tests are a separate tier:
 
 [ShellCheck](https://www.shellcheck.net/) and [rustfmt](https://github.com/rust-lang/rustfmt) must be on `PATH`. `nix develop` provides both, along with the pinned Rust and Android toolchains.
 
-### Submitting your changes
+### Where state lives
+
+Pick the shortest lifetime that still holds the data long enough:
+
+- **Survives navigation and belongs to the signed-in account** — `accountScoped(create)` from [account-caches.ts](./src/lib/api/account-caches.ts). One instance per profile id, the previous one destroyed on account change. Conversations, taps and views use it.
+- **Survives navigation and is not per-account** — a module singleton that calls `registerAccountCache({ reset })` itself, like `gridState` and the API caches. Anything cached across screens must register a reset, or it leaks into the next account.
+- **Belongs to one route parameter** — a class the page constructs and destroys in an `$effect`, rebuilt when the parameter changes: `ConversationState`, `ProfileState`. Use it when reopening the screen should start over.
+- **Belongs to one mount** — plain `$state` in the component.
+
+Data that outlives the component goes in a state class, not in `<script module>`.
+
+### Function parameters
+
+Use named arguments in functions, except when:
+
+- a subject followed by options — `fetchRest(path, { method })`
+- order carries no meaning — `deepEqual(a, b)`
+- the call reads as prose — `formatHeight(180, "cm")`
+- the name already names its only argument — `getProfileById(profileId)`
+
+## Submitting your changes
 
 1. [Create an account](https://git.opengrind.org/user/sign_up) on git.opengrind.org
 2. [Create an SSH key](https://docs.codeberg.org/security/ssh-key/) for authorization on your computer and add it to your SSH config
@@ -145,7 +167,7 @@ End-to-end tests are a separate tier:
 14. [Open a pull request](https://git.opengrind.org/open-grind/open-grind/pulls) in Pull requests page on git.opengrind.org
 15. Submit and mark for review once you're ready
 
-## Inclusion in GOVERNANCE.md
+### Inclusion in GOVERNANCE.md
 
 **Criteria:** Once you have at least 1 accepted PR with significant changes (a feature, a bug fix, a section of documentation), you can request inclusion into GOVERNANCE.md. AI-generated PRs don't count, unless you have proven significant work and understanding of the subject beyond the AI-generated content.
 

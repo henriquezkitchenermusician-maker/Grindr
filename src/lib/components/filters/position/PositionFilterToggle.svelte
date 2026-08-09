@@ -10,14 +10,15 @@
 	} from "phosphor-svelte";
 	import type z from "zod";
 
+	import * as ToggleGroup from "$lib/components/ui/toggle-group";
 	import {
 		FilterPosition,
 		filterPositionSchema,
-	} from "$lib/components/filters/filters";
-	import * as ToggleGroup from "$lib/components/ui/toggle-group";
+	} from "$lib/model/browse/grid/filters";
 
-	let { value = $bindable() }: { value: z.infer<typeof filterPositionSchema> } =
-		$props();
+	let {
+		value = $bindable(),
+	}: { value: z.infer<typeof filterPositionSchema> } = $props();
 </script>
 
 <ToggleGroup.Root

@@ -1,6 +1,6 @@
 import z from "zod";
 
-import { fetchRest } from "$lib/api";
+import { fetchRest } from "$lib/api/transport";
 import {
 	viewerProfileSchema,
 	viewPreviewSchema,
@@ -20,9 +20,6 @@ export async function getViews() {
 export async function recordProfileView({ profileId }: { profileId: number }) {
 	await fetchRest(`/v5/views/${profileId}`, {
 		method: "POST",
-		body: {
-			source: "UNKNOWN",
-			foundVia: null,
-		},
+		body: { source: "UNKNOWN", foundVia: null },
 	}).then((res) => res.assertOk());
 }

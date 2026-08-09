@@ -1,4 +1,4 @@
-import { showErrorToast } from "$lib/api/error";
+import { showErrorToast } from "$lib/api/error-toast";
 import { reconciler } from "$lib/util/reconcile";
 
 export abstract class ReconcilingListState<TItem, TSnapshot, TKey = number> {
@@ -6,14 +6,17 @@ export abstract class ReconcilingListState<TItem, TSnapshot, TKey = number> {
 	refreshing = $state(false);
 	error: Error | null = $state(null);
 	visibleCount = $state(0);
+	scrollY = 0;
 
 	readonly #pageSize: number;
 	readonly #refreshErrorLabel: string;
-	#initial: Promise<void> = Promise.resolve();
+	#loaded = false;
 	#destroyed = false;
 	#unsubscribeReconcile: (() => void) | null = null;
 	#unlisten: Promise<() => void> | null = null;
-	#reconcileBuffer: TItem[] | null = null;
+	#buffer: TItem[] | null = null;
+	#fetchToken = 0;
+	#refreshRequestedSinceFetchStart = false;
 
 	constructor({
 		pageSize,
@@ -27,16 +30,11 @@ export abstract class ReconcilingListState<TItem, TSnapshot, TKey = number> {
 		this.visibleCount = pageSize;
 	}
 
-	// Subclasses must call this at the END of their constructor: subclass $state
-	// fields only exist after super() returns.
+	// A subclass calls this last: its fields exist only after super() returns.
 	protected start(): void {
-		this.#initial = this.#initialLoad();
-		this.#unsubscribeReconcile = reconciler.subscribe(() => this.#reconcile());
+		void this.#hardLoad();
+		this.#unsubscribeReconcile = reconciler.subscribe(() => this.refresh());
 		this.#unlisten = this.subscribeEvents();
-	}
-
-	protected get destroyed(): boolean {
-		return this.#destroyed;
 	}
 
 	get hasMore(): boolean {
@@ -48,12 +46,31 @@ export abstract class ReconcilingListState<TItem, TSnapshot, TKey = number> {
 		this.visibleCount += this.#pageSize;
 	}
 
-	retry(): void {
-		this.#initial = this.#initialLoad();
+	load(): void {
+		if (this.#loaded || this.loading || this.refreshing) return;
+		this.retry();
 	}
 
-	refresh(): Promise<void> {
-		return this.#reconcile();
+	retry(): void {
+		void this.#hardLoad();
+	}
+
+	async refresh(): Promise<void> {
+		if (this.#destroyed) return;
+		if (this.refreshing || this.loading) {
+			this.#refreshRequestedSinceFetchStart = true;
+			return;
+		}
+		this.refreshing = true;
+		try {
+			await this.#replaceFromServer();
+		} catch (error) {
+			console.error(error);
+			showErrorToast({ label: this.#refreshErrorLabel, error });
+		} finally {
+			this.refreshing = false;
+			this.#runRequestedRefresh();
+		}
 	}
 
 	destroy(): void {
@@ -65,55 +82,62 @@ export abstract class ReconcilingListState<TItem, TSnapshot, TKey = number> {
 
 	protected upsert(item: TItem): void {
 		if (this.#destroyed) return;
-		this.#reconcileBuffer?.push(item);
+		this.#buffer?.push(item);
 		this.applyUpsert(item);
 	}
 
-	async #initialLoad(): Promise<void> {
+	async #hardLoad(): Promise<void> {
 		this.loading = true;
 		this.error = null;
 		try {
-			const snapshot = await this.fetch();
-			if (this.#destroyed) return;
-			this.applySnapshot(snapshot);
-		} catch (err) {
-			if (this.#destroyed) return;
-			this.error = err instanceof Error ? err : new Error(String(err));
+			await this.#replaceFromServer();
+		} catch (error) {
+			this.error =
+				error instanceof Error ? error : new Error(String(error));
 		} finally {
 			this.loading = false;
+			this.#runRequestedRefresh();
 		}
 	}
 
-	async #reconcile(): Promise<void> {
-		if (this.#destroyed || this.refreshing) return;
-		this.refreshing = true;
-		// Buffer upserts arriving mid-fetch so the wholesale replace can't drop them.
+	#runRequestedRefresh(): void {
+		if (!this.#refreshRequestedSinceFetchStart) return;
+		this.#refreshRequestedSinceFetchStart = false;
+		void this.refresh();
+	}
+
+	async #replaceFromServer(): Promise<void> {
+		if (this.#destroyed) return;
+		const token = ++this.#fetchToken;
+		this.#refreshRequestedSinceFetchStart = false;
 		const buffer: TItem[] = [];
-		this.#reconcileBuffer = buffer;
+		this.#buffer = buffer;
 		try {
-			await this.#initial.catch(() => {});
-			if (this.#destroyed) return;
 			const snapshot = await this.fetch();
-			if (this.#destroyed) return;
-			const known = this.applySnapshot(snapshot);
+			if (this.#superseded(token)) return;
+			const covered = this.applySnapshotReturningCoveredKeys(snapshot);
 			for (const item of buffer) {
-				if (!known.has(this.keyOf(item))) this.applyUpsert(item);
+				if (!covered.has(this.keyOf(item))) this.applyUpsert(item);
 			}
+			this.#loaded = true;
 			this.error = null;
 		} catch (error) {
-			console.error(error);
-			showErrorToast({ label: this.#refreshErrorLabel, error });
+			if (this.#superseded(token)) return;
+			throw error;
 		} finally {
-			if (this.#reconcileBuffer === buffer) this.#reconcileBuffer = null;
-			this.refreshing = false;
+			if (this.#buffer === buffer) this.#buffer = null;
 		}
+	}
+
+	#superseded(token: number): boolean {
+		return this.#destroyed || token !== this.#fetchToken;
 	}
 
 	protected abstract get length(): number;
 	protected abstract fetch(): Promise<TSnapshot>;
-	// Assigns the snapshot to the store; returns the keys it covers, so buffered
-	// upserts the snapshot already includes are skipped on replay.
-	protected abstract applySnapshot(snapshot: TSnapshot): Set<TKey>;
+	protected abstract applySnapshotReturningCoveredKeys(
+		snapshot: TSnapshot,
+	): Set<TKey>;
 	protected abstract applyUpsert(item: TItem): void;
 	protected abstract keyOf(item: TItem): TKey;
 	protected abstract subscribeEvents(): Promise<() => void>;

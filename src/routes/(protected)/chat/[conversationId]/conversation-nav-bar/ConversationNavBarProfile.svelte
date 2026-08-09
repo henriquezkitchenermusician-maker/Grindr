@@ -7,11 +7,7 @@
 	import * as Card from "$lib/components/ui/card";
 	import type { ConversationProfile } from "../conversation-state.svelte";
 
-	let {
-		profile,
-	}: {
-		profile: ConversationProfile;
-	} = $props();
+	let { profile }: { profile: ConversationProfile } = $props();
 </script>
 
 <a href="/profile/{profile.profileId}" class="flex-1 py-4 ps-0 pe-4">
@@ -27,16 +23,16 @@
 			<Card.Title
 				class={[
 					"flex min-w-0 items-center gap-1",
-					{
-						"text-muted-foreground": !profile.name,
-					},
+					{ "text-muted-foreground": !profile.name },
 				]}
 			>
 				<ProfileStatusIndicator onlineUntil={profile.onlineUntil} />
 				<DisplayName name={profile.name} class="truncate" />
 			</Card.Title>
 			{#if profile.distance === null}
-				<Card.Description class="truncate">Distance unknown</Card.Description>
+				<Card.Description class="truncate"
+					>Distance unknown</Card.Description
+				>
 			{:else}
 				<Card.Description class="truncate">
 					<DistanceFormatted distance={profile.distance} />

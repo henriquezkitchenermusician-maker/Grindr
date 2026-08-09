@@ -1,39 +1,36 @@
 import z from "zod";
 
-import { fetchRest } from "$lib/api";
-import { registerAccountCache } from "$lib/api/account-caches";
+import { FetchCache } from "$lib/api/cache";
+import { fetchRest } from "$lib/api/transport";
+import {
+	markProfileUnviewable,
+	markProfileViewable,
+} from "$lib/api/users/profile-viewability";
 import type { Profile } from "$lib/model/users/profiles";
 
 const getBlockedUsersResponseSchema = z.object({
 	blocking: z.array(
-		z.object({
-			profileId: z.number(),
-			blockedTime: z.number(),
-		}),
+		z.object({ profileId: z.number(), blockedTime: z.number() }),
 	),
 });
 
-let blockedUsersCache: {
-	blocking: z.infer<typeof getBlockedUsersResponseSchema>["blocking"];
-	updatedAt: number;
-} | null = null;
+type BlockedUsers = z.infer<typeof getBlockedUsersResponseSchema>["blocking"];
 
-registerAccountCache(() => {
-	blockedUsersCache = null;
-});
+const blockedUsers = new FetchCache<null, BlockedUsers>(
+	() =>
+		fetchRest("/v3.1/me/blocks").then(
+			(res) => res.jsonParsed(getBlockedUsersResponseSchema).blocking,
+		),
+	{ ttlMs: 5_000 },
+);
 
-export async function getBlockedUsers() {
-	if (
-		blockedUsersCache &&
-		Date.now() - blockedUsersCache.updatedAt < 1000 * 5
-	) {
-		return blockedUsersCache.blocking;
-	}
-	const { blocking } = await fetchRest("/v3.1/me/blocks").then((res) =>
-		res.jsonParsed(getBlockedUsersResponseSchema),
-	);
-	blockedUsersCache = { blocking, updatedAt: Date.now() };
-	return blocking;
+export function getBlockedUsers(): Promise<BlockedUsers> {
+	return blockedUsers.fetch(null);
+}
+
+export async function markBlockedProfilesUnviewable(): Promise<void> {
+	for (const { profileId } of await getBlockedUsers())
+		markProfileUnviewable(profileId);
 }
 
 export async function blockUser({
@@ -41,9 +38,11 @@ export async function blockUser({
 }: {
 	profileId: Profile["profileId"];
 }) {
-	await fetchRest(`/v3/me/blocks/${profileId}`, {
-		method: "POST",
-	}).then((res) => res.assertOk());
+	await fetchRest(`/v3/me/blocks/${profileId}`, { method: "POST" }).then(
+		(res) => res.assertOk(),
+	);
+	blockedUsers.clear();
+	markProfileUnviewable(profileId);
 }
 
 export async function unblockUser({
@@ -51,7 +50,9 @@ export async function unblockUser({
 }: {
 	profileId: Profile["profileId"];
 }) {
-	await fetchRest(`/v3/me/blocks/${profileId}`, {
-		method: "DELETE",
-	}).then((res) => res.assertOk());
+	await fetchRest(`/v3/me/blocks/${profileId}`, { method: "DELETE" }).then(
+		(res) => res.assertOk(),
+	);
+	blockedUsers.clear();
+	markProfileViewable(profileId);
 }

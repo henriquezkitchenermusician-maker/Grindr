@@ -1,31 +1,21 @@
 <script lang="ts">
 	import {
-		getGeohashSnapshot,
+		getPreferencesSnapshot,
 		hydratePreferences,
 	} from "$lib/app-data/preferences.svelte";
 	import DataRefreshControl from "$lib/components/feedback/DataRefreshControl.svelte";
 	import { gridState } from "$lib/grid/grid-state.svelte";
+	import { restoreScrollOnce } from "$lib/util/scroll-restore.svelte";
 	import Grid from "./Grid.svelte";
 	import LocationChooser from "./LocationEmpty.svelte";
 	import TopBar from "./top-bar/TopBar.svelte";
 
 	const preferencesHydrated = hydratePreferences();
-	const geohash = $derived(getGeohashSnapshot());
+	const geohash = $derived(getPreferencesSnapshot().geohash);
 
 	let gridContainer: HTMLElement | null = $state(null);
 
-	let scrollRestored = false;
-	$effect(() => {
-		if (
-			!scrollRestored &&
-			gridContainer &&
-			!gridState.loading &&
-			gridState.error === null
-		) {
-			scrollRestored = true;
-			gridContainer.scrollTop = gridState.scrollY;
-		}
-	});
+	restoreScrollOnce(() => gridContainer, gridState);
 </script>
 
 <svelte:head>
@@ -42,7 +32,8 @@
 			<div
 				class="pull-scroller"
 				bind:this={gridContainer}
-				onscroll={() => (gridState.scrollY = gridContainer?.scrollTop ?? 0)}
+				onscroll={() =>
+					(gridState.scrollY = gridContainer?.scrollTop ?? 0)}
 			>
 				<div
 					class="@container/photo-grid flex min-h-overscrollable flex-col gap-4 px-4 pt-17 pb-nav-clear"
