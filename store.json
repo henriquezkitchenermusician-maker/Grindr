@@ -9,6 +9,31 @@
   "iconURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/icon.png",
   "apps": [
     {
+      "name": "Plus+ Store",
+      "bundleIdentifier": "io.github.henriquezkitchenermusician.SideStore",
+      "developerName": "Basado en SideStore (AGPL-3.0)",
+      "subtitle": "Instala .ipa desde tu iPhone",
+      "localizedDescription": "Copia de SideStore con nombre e icono propios. Instala y renueva apps desde el iPhone, incluidas tus .ipa desde Archivos (My Apps → +).",
+      "iconURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/store-app/icon-1024.png",
+      "tintColor": "#FFCC00",
+      "category": "utilities",
+      "versions": [
+        {
+          "version": "0.7.0",
+          "buildVersion": "0700",
+          "date": "2026-11-04T19:23:50Z",
+          "localizedDescription": "Compilado de SideStore cd26085.",
+          "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/store-app-0.7.0-cd26085/PlusStore.ipa",
+          "size": 18477907,
+          "minOSVersion": "15.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      }
+    },
+    {
       "name": "Plus+",
       "bundleIdentifier": "org.opengrind",
       "developerName": "Open Grind Governance",
