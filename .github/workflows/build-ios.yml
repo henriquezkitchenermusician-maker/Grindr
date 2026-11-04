@@ -92,6 +92,19 @@ jobs:
         run: |
           [ -f og/src-tauri/Info.ios.plist ] || cp self/Info.ios.plist og/src-tauri/Info.ios.plist
 
+      - name: Versión numérica para iOS
+        run: |
+          python3 - <<'EOF'
+          import json, re
+          p = "og/src-tauri/tauri.conf.json"
+          c = json.load(open(p))
+          core = re.match(r"\d+\.\d+\.\d+", c["version"]).group(0)
+          print(c["version"], "->", core, "build ${{ github.run_number }}")
+          c["version"] = core
+          c.setdefault("bundle", {}).setdefault("iOS", {})["bundleVersion"] = "${{ github.run_number }}"
+          json.dump(c, open(p, "w"), indent="\t")
+          EOF
+
       - name: Instalar dependencias
         working-directory: og
         run: bun install --frozen-lockfile
@@ -104,7 +117,7 @@ jobs:
 
       - name: Compilar .ipa sin firmar
         working-directory: og
-        run: bun tauri ios build --no-sign --ci --target aarch64 --build-number ${{ github.run_number }}
+        run: bun tauri ios build --no-sign --ci --target aarch64
 
       - name: Localizar .ipa y leer versión
         id: ipa
