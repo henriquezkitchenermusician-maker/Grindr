@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Open Grind usa tu ubicación para mostrar perfiles cercanos.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Open Grind usa la cámara para tomar fotos y enviarlas en el chat.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Open Grind accede a tus fotos para elegir imágenes de perfil y del chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Open Grind guarda en tus fotos las imágenes que decidas descargar.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Open Grind usa el micrófono para grabar videos.</string>
+</dict>
+</plist>

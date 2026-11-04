@@ -1,0 +1,31 @@
+{
+  "name": "Open Grind iOS (compilación personal)",
+  "identifier": "io.github.usuario.open-grind-ios",
+  "sourceURL": "",
+  "website": "",
+  "subtitle": "Compilaciones automáticas sin firmar de Open Grind",
+  "description": "Compilaciones automáticas del código oficial de Open Grind (https://opengrind.org). No es una versión oficial.",
+  "tintColor": "#FFCC00",
+  "apps": [
+    {
+      "name": "Open Grind",
+      "bundleIdentifier": "org.opengrind",
+      "developerName": "Open Grind Governance",
+      "subtitle": "Cliente libre y no oficial de Grindr",
+      "localizedDescription": "Cliente multiplataforma, libre, sin anuncios ni rastreadores. Código: https://git.opengrind.org/open-grind/open-grind (licencia MIT).",
+      "iconURL": "",
+      "tintColor": "#FFCC00",
+      "category": "social",
+      "versions": [],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSLocationWhenInUseUsageDescription": "Para mostrar perfiles cercanos.",
+          "NSCameraUsageDescription": "Para tomar fotos y enviarlas en el chat.",
+          "NSPhotoLibraryUsageDescription": "Para elegir fotos de perfil y del chat."
+        }
+      }
+    }
+  ],
+  "news": []
+}
