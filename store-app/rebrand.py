@@ -42,11 +42,11 @@ if "CFBundleDisplayName" not in s:
 print(f"[name] {DISPLAY_NAME}")
 
 # 3) Identificador propio (evita chocar con el SideStore oficial).
-for rel in ("Makefile", "Build.xcconfig"):
+# En el Makefile va como argumento de xcodebuild: sin espacios alrededor del "=".
+for rel, sep in (("Makefile", "="), ("Build.xcconfig", " = ")):
     f = root / rel
     t = f.read_text()
-    t2 = re.sub(r"ORG_IDENTIFIER\s*=\s*com\.SideStore", f"ORG_IDENTIFIER = {org}", t)
-    t2 = t2.replace("ORG_IDENTIFIER=com.SideStore", f"ORG_IDENTIFIER={org}")
+    t2 = re.sub(r"ORG_IDENTIFIER(\s*)=(\s*)com\.SideStore", f"ORG_IDENTIFIER{sep}{org}", t)
     if t2 != t:
         f.write_text(t2)
         print(f"[id]   {rel}: {org}")
