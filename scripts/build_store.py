@@ -28,6 +28,9 @@ old_apps = {a.get("bundleIdentifier"): a for a in old.get("apps", [])}
 
 own = json.loads(Path("source.json").read_text(encoding="utf-8"))
 apps = list(own["apps"])
+# La app instaladora Plus+ Store (la escribe build-store-app.yml).
+if Path("store-app.json").exists():
+    apps = json.loads(Path("store-app.json").read_text(encoding="utf-8"))["apps"] + apps
 seen = {a["bundleIdentifier"] for a in apps}
 
 

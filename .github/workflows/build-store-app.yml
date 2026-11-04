@@ -1,0 +1,148 @@
+name: Build Plus+ Store app
+
+# Compila "Plus+ Store": copia de SideStore (AGPL-3.0) con nombre, icono e
+# identificador propios. Revisa cada semana si SideStore cambió.
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Compilar aunque no haya cambios"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-store-app
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/SideStore/SideStore.git
+  ORG_ID: io.github.henriquezkitchenermusician
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.up.outputs.sha }}
+      build: ${{ steps.up.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: up
+        run: |
+          SHA=$(git ls-remote "$UPSTREAM" HEAD | cut -f1)
+          LAST=$(cat .sidestore-sha 2>/dev/null || echo none)
+          BUILD=false
+          if [ "$SHA" != "$LAST" ] || [ "${{ inputs.force }}" = "true" ]; then BUILD=true; fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: self
+
+      - name: Clonar SideStore
+        run: |
+          git init -q ss && cd ss
+          git remote add origin "$UPSTREAM"
+          git fetch -q --depth 1 origin "${{ needs.check.outputs.sha }}"
+          git checkout -q FETCH_HEAD
+          git submodule update --init --recursive --depth 1
+
+      - name: Elegir el Xcode más nuevo
+        run: |
+          ls -d /Applications/Xcode*.app
+          X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+
+      - run: brew install ldid xcbeautify
+
+      - name: Cambiar marca (Plus+ Store)
+        run: python3 self/store-app/rebrand.py ss self/store-app/icon-1024.png "$ORG_ID"
+
+      - name: Compilar
+        working-directory: ss
+        run: |
+          set -o pipefail
+          make build 2>&1 | xcbeautify --renderer github-actions
+          make fakesign
+          make ipa
+
+      - name: Datos del .ipa
+        id: ipa
+        run: |
+          mv ss/SideStore.ipa PlusStore.ipa
+          unzip -q -o PlusStore.ipa -d x
+          P="x/Payload/SideStore.app/Info.plist"
+          VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$P")
+          BUILDV=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$P")
+          BID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$P")
+          NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$P")
+          MINOS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$P" 2>/dev/null || echo 15.0)
+          SHORT=$(echo "${{ needs.check.outputs.sha }}" | cut -c1-7)
+          echo "Nombre=$NAME id=$BID versión=$VER ($BUILDV)"
+          {
+            echo "version=$VER"; echo "buildv=$BUILDV"; echo "bid=$BID"
+            echo "minos=$MINOS"; echo "short=$SHORT"
+            echo "tag=store-app-$VER-$SHORT"
+            echo "size=$(stat -f%z PlusStore.ipa)"
+          } >> "$GITHUB_OUTPUT"
+          shasum -a 256 PlusStore.ipa | tee PlusStore.ipa.sha256
+
+      - name: Publicar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd self
+          gh release delete "${{ steps.ipa.outputs.tag }}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "${{ steps.ipa.outputs.tag }}" ../PlusStore.ipa ../PlusStore.ipa.sha256 \
+            --title "Plus+ Store ${{ steps.ipa.outputs.version }} (${{ steps.ipa.outputs.short }})" \
+            --notes "Plus+ Store: copia de SideStore (AGPL-3.0, https://github.com/SideStore/SideStore) con nombre e icono propios. Commit de SideStore: ${{ needs.check.outputs.sha }}. Código fuente: https://github.com/SideStore/SideStore/tree/${{ needs.check.outputs.sha }} + cambios en store-app/rebrand.py de este repo."
+
+      - name: Actualizar store-app.json
+        run: |
+          cd self
+          python3 - <<'EOF'
+          import json
+          from datetime import datetime, timezone
+          repo = "${{ github.repository }}"
+          branch = "${{ github.event.repository.default_branch }}"
+          app = {
+            "name": "Plus+ Store",
+            "bundleIdentifier": "${{ steps.ipa.outputs.bid }}",
+            "developerName": "Basado en SideStore (AGPL-3.0)",
+            "subtitle": "Instala .ipa desde tu iPhone",
+            "localizedDescription": "Copia de SideStore con nombre e icono propios. Instala y renueva apps desde el iPhone, incluidas tus .ipa desde Archivos (My Apps → +).",
+            "iconURL": f"https://raw.githubusercontent.com/{repo}/{branch}/store-app/icon-1024.png",
+            "tintColor": "#FFCC00",
+            "category": "utilities",
+            "versions": [{
+              "version": "${{ steps.ipa.outputs.version }}",
+              "buildVersion": "${{ steps.ipa.outputs.buildv }}",
+              "date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "localizedDescription": "Compilado de SideStore ${{ steps.ipa.outputs.short }}.",
+              "downloadURL": f"https://github.com/{repo}/releases/download/${{ steps.ipa.outputs.tag }}/PlusStore.ipa",
+              "size": int("${{ steps.ipa.outputs.size }}"),
+              "minOSVersion": "${{ steps.ipa.outputs.minos }}",
+            }],
+            "appPermissions": {"entitlements": [], "privacy": {}},
+          }
+          json.dump({"apps": [app]}, open("store-app.json", "w"), indent=2, ensure_ascii=False)
+          EOF
+          echo "${{ needs.check.outputs.sha }}" > .sidestore-sha
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add store-app.json .sidestore-sha
+          git commit -m "Plus+ Store app ${{ steps.ipa.outputs.tag }}"
+          git pull --rebase
+          git push

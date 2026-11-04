@@ -6,7 +6,7 @@ on:
   schedule:
     - cron: "41 3 * * *"
   workflow_run:
-    workflows: ["Build Open Grind for iOS"]
+    workflows: ["Build Open Grind for iOS", "Build Plus+ Store app"]
     types: [completed]
   workflow_dispatch:
 
