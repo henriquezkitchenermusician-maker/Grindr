@@ -1,0 +1,85 @@
+diff --git a/src/routes/(protected)/(navbar)/profile/[profileId]/ProfileBody.svelte b/src/routes/(protected)/(navbar)/profile/[profileId]/ProfileBody.svelte
+index bb8b3af5..4811e4cb 100644
+--- a/src/routes/(protected)/(navbar)/profile/[profileId]/ProfileBody.svelte
++++ b/src/routes/(protected)/(navbar)/profile/[profileId]/ProfileBody.svelte
+@@ -25,6 +25,7 @@
+ 	import HivStatusIcon from "./fields/HivStatusIcon.svelte";
+ 	import LastTested from "./fields/LastTested.svelte";
+ 	import LookupField from "./fields/LookupField.svelte";
++	import ProfileDetails from "./fields/ProfileDetails.svelte";
+ 	import Socials from "./fields/Socials.svelte";
+ 	import Height from "./HeightWeightBodyType.svelte";
+ 	import NewBadge from "./NewBadge.svelte";
+@@ -167,6 +168,13 @@
+ 				options={healthPracticeLabels}
+ 			/>
+ 		</ProfileSection>
++		<ProfileSection title="Details">
++			<ProfileDetails
++				profileId={profile.profileId}
++				lastUpdatedTime={profile.lastUpdatedTime}
++				photoCount={profile.medias.length}
++			/>
++		</ProfileSection>
+ 		<ProfileSection title="Socials">
+ 			<Socials socials={socialNetworks} />
+ 		</ProfileSection>
+diff --git a/src/routes/(protected)/(navbar)/profile/[profileId]/fields/ProfileDetails.svelte b/src/routes/(protected)/(navbar)/profile/[profileId]/fields/ProfileDetails.svelte
+new file mode 100644
+index 00000000..1dd69f21
+--- /dev/null
++++ b/src/routes/(protected)/(navbar)/profile/[profileId]/fields/ProfileDetails.svelte
+@@ -0,0 +1,53 @@
++<script lang="ts">
++	import { formatDistanceToNow } from "date-fns";
++	import ClockCounterClockwiseIcon from "phosphor-svelte/lib/ClockCounterClockwiseIcon";
++	import HashIcon from "phosphor-svelte/lib/HashIcon";
++	import ImagesIcon from "phosphor-svelte/lib/ImagesIcon";
++	import { toast } from "svelte-sonner";
++
++	import ProfileField from "./ProfileField.svelte";
++	import ProfileValueLabel from "./ProfileValueLabel.svelte";
++
++	let {
++		profileId,
++		lastUpdatedTime,
++		photoCount,
++	}: {
++		profileId: number;
++		lastUpdatedTime: number | null;
++		photoCount: number;
++	} = $props();
++
++	async function copyId() {
++		try {
++			const clipboard = await import("@tauri-apps/plugin-clipboard-manager");
++			await clipboard.writeText(String(profileId));
++			toast.success("Profile ID copied to clipboard");
++		} catch (error) {
++			console.error(error);
++		}
++	}
++</script>
++
++<ProfileField>
++	<HashIcon class="shrink-0" />
++	<ProfileValueLabel label="Profile ID">
++		<button type="button" class="underline-offset-4 hover:underline" onclick={copyId}>
++			{profileId}
++		</button>
++	</ProfileValueLabel>
++</ProfileField>
++{#if lastUpdatedTime !== null && lastUpdatedTime > 0}
++	<ProfileField>
++		<ClockCounterClockwiseIcon class="shrink-0" />
++		<ProfileValueLabel label="Profile updated">
++			{formatDistanceToNow(new Date(lastUpdatedTime), { addSuffix: true })}
++		</ProfileValueLabel>
++	</ProfileField>
++{/if}
++<ProfileField>
++	<ImagesIcon class="shrink-0" />
++	<ProfileValueLabel label="Public photos">
++		{photoCount}
++	</ProfileValueLabel>
++</ProfileField>

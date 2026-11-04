@@ -1,0 +1,84 @@
+diff --git a/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ChatQuickBlock.svelte b/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ChatQuickBlock.svelte
+new file mode 100644
+index 00000000..ef19dcab
+--- /dev/null
++++ b/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ChatQuickBlock.svelte
+@@ -0,0 +1,58 @@
++<script lang="ts">
++	import { goto } from "$app/navigation";
++	import ProhibitIcon from "phosphor-svelte/lib/ProhibitIcon";
++	import { toast } from "svelte-sonner";
++
++	import { blockUser } from "#lib/api/browse/blocks.ts";
++	import { showBlockFailure } from "#lib/components/report/block-failure.ts";
++	import { Button } from "#lib/components/ui/button/index.ts";
++
++	const CONFIRM_WINDOW_MS = 3_000;
++
++	let { profileId }: { profileId: number } = $props();
++
++	let armed = $state(false);
++	let busy = $state(false);
++	let timer: ReturnType<typeof setTimeout> | undefined;
++
++	function disarm() {
++		armed = false;
++		clearTimeout(timer);
++	}
++
++	async function onClick() {
++		if (busy) return;
++		if (!armed) {
++			armed = true;
++			timer = setTimeout(disarm, CONFIRM_WINDOW_MS);
++			return;
++		}
++		disarm();
++		busy = true;
++		try {
++			await blockUser({ profileId });
++			toast.success("Profile blocked");
++			await goto("/chat");
++		} catch (error) {
++			showBlockFailure(error);
++		} finally {
++			busy = false;
++		}
++	}
++
++	$effect(() => () => clearTimeout(timer));
++</script>
++
++<Button
++	variant={armed ? "destructive" : "ghost"}
++	size={armed ? "sm" : "icon-lg"}
++	class="me-3 shrink-0"
++	aria-label={armed ? "Tap again to block" : "Quick block"}
++	disabled={busy}
++	onclick={onClick}
++>
++	<ProhibitIcon class="size-6" />
++	{#if armed}
++		<span>Block?</span>
++	{/if}
++</Button>
+diff --git a/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ConversationNavBar.svelte b/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ConversationNavBar.svelte
+index e6538023..d5bcd68c 100644
+--- a/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ConversationNavBar.svelte
++++ b/src/routes/(protected)/chat/[conversationId]/conversation-nav-bar/ConversationNavBar.svelte
+@@ -6,6 +6,7 @@
+ 	import { Skeleton } from "#lib/components/ui/skeleton/index.ts";
+ 	import { topChrome } from "#lib/util/screen-chrome.svelte.ts";
+ 	import { getConversationState } from "../conversation-state.svelte";
++	import ChatQuickBlock from "./ChatQuickBlock.svelte";
+ 	import ConversationNavBarProfile from "./ConversationNavBarProfile.svelte";
+ 
+ 	const conversationState = $derived(getConversationState()());
+@@ -29,6 +30,7 @@
+ 	</BackLink>
+ 	{#if conversationState.profile !== null}
+ 		<ConversationNavBarProfile profile={conversationState.profile} />
++		<ChatQuickBlock profileId={conversationState.profile.profileId} />
+ 	{:else if conversationState.error}
+ 		<span class="flex-1">Failed to load conversation</span>
+ 	{:else}
