@@ -1,0 +1,45 @@
+name: Update Plus+ Store
+
+# Regenera store.json (tu fuente personal) una vez al día
+# y cada vez que termina una compilación de Plus+.
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_run:
+    workflows: ["Build Open Grind for iOS"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: store
+  cancel-in-progress: false
+
+jobs:
+  store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Generar store.json
+        run: |
+          python3 scripts/build_store.py \
+            --repo "${{ github.repository }}" \
+            --branch "${{ github.event.repository.default_branch }}"
+
+      - name: Guardar cambios
+        run: |
+          git add store.json
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update Plus+ Store"
+          git pull --rebase
+          git push
