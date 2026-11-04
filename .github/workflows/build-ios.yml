@@ -92,6 +92,9 @@ jobs:
         run: |
           [ -f og/src-tauri/Info.ios.plist ] || cp self/Info.ios.plist og/src-tauri/Info.ios.plist
 
+      - name: Parches para iOS
+        run: python3 self/ios-patches/apply.py og
+
       - name: Versión numérica para iOS
         run: |
           python3 - <<'EOF'
