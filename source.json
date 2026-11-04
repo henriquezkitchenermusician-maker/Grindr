@@ -1,8 +1,8 @@
 {
   "name": "Open Grind iOS (compilación personal)",
-  "identifier": "io.github.usuario.open-grind-ios",
-  "sourceURL": "",
-  "website": "",
+  "identifier": "io.github.henriquezkitchenermusician-maker.grindr",
+  "sourceURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/source.json",
+  "website": "https://github.com/henriquezkitchenermusician-maker/Grindr",
   "subtitle": "Compilaciones automáticas sin firmar de Open Grind",
   "description": "Compilaciones automáticas del código oficial de Open Grind (https://opengrind.org). No es una versión oficial.",
   "tintColor": "#FFCC00",
@@ -13,10 +13,20 @@
       "developerName": "Open Grind Governance",
       "subtitle": "Cliente libre y no oficial de Grindr",
       "localizedDescription": "Cliente multiplataforma, libre, sin anuncios ni rastreadores. Código: https://git.opengrind.org/open-grind/open-grind (licencia MIT).",
-      "iconURL": "",
+      "iconURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/icon.png",
       "tintColor": "#FFCC00",
       "category": "social",
-      "versions": [],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "buildVersion": "3",
+          "date": "2026-11-04T01:25:55Z",
+          "localizedDescription": "Compilado del commit oficial e983d37.",
+          "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/ios-0.1.0-3-e983d37/OpenGrind.ipa",
+          "size": 8229685,
+          "minOSVersion": "14.0"
+        }
+      ],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
