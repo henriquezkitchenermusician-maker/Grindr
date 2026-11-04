@@ -19,6 +19,15 @@
       "versions": [
         {
           "version": "0.1.0",
+          "buildVersion": "7",
+          "date": "2026-11-04T23:52:49Z",
+          "localizedDescription": "Compilado del commit oficial 1556e85.",
+          "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/ios-0.1.0-7-1556e85/OpenGrind.ipa",
+          "size": 8231526,
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "0.1.0",
           "buildVersion": "6",
           "date": "2026-11-04T14:44:21Z",
           "localizedDescription": "Compilado del commit oficial cb9292b.",
