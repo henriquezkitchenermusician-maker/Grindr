@@ -1,0 +1,201 @@
+diff --git a/src/lib/app-data/preferences.svelte.ts b/src/lib/app-data/preferences.svelte.ts
+index f5032b4f..d56184bf 100644
+--- a/src/lib/app-data/preferences.svelte.ts
++++ b/src/lib/app-data/preferences.svelte.ts
+@@ -33,6 +33,7 @@ const preferencesSchema = z.object({
+ 	notificationsEnabled: z.boolean().default(false),
+ 	revealMessageRead: z.boolean().default(false),
+ 	revealProfileViews: z.boolean().default(false),
++	savedPhrases: z.array(z.string().max(500)).max(50).default([]).catch([]),
+ 	stayOnline: z.boolean().default(true),
+ 	units: unitSystemSchema.default("metric"),
+ });
+diff --git a/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/ComposerStickersMenu.svelte b/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/ComposerStickersMenu.svelte
+index ad4dcc94..7d5e3113 100644
+--- a/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/ComposerStickersMenu.svelte
++++ b/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/ComposerStickersMenu.svelte
+@@ -1,4 +1,5 @@
+ <script lang="ts">
++	import ChatIcon from "phosphor-svelte/lib/ChatIcon";
+ 	import GifIcon from "phosphor-svelte/lib/GifIcon";
+ 	import SmileyIcon from "phosphor-svelte/lib/SmileyIcon";
+ 	import { untrack } from "svelte";
+@@ -17,9 +18,10 @@
+ 	import { getMessageComposerContext } from "../message-composer-context.svelte";
+ 	import ComposerGaymojiTab from "./gaymoji/ComposerGaymojiTab.svelte";
+ 	import ComposerGifTab from "./gifs/ComposerGifTab.svelte";
++	import ComposerPhrasesTab from "./phrases/ComposerPhrasesTab.svelte";
+ 	import type { StickerPick } from "./sticker-pick";
+ 
+-	type StickerTab = "gifs" | "gaymoji";
++	type StickerTab = "gifs" | "gaymoji" | "phrases";
+ 
+ 	let {
+ 		open = $bindable(),
+@@ -29,6 +31,7 @@
+ 	const SEND_LABELS: Record<StickerTab, string> = {
+ 		gifs: "Send GIF",
+ 		gaymoji: "Send Gaymoji",
++		phrases: "Send phrase",
+ 	};
+ 
+ 	const composer = getMessageComposerContext();
+@@ -39,7 +42,9 @@
+ 
+ 	const picked = $derived(picks[selectedTab]);
+ 	const consented = $derived(giphyConsented());
+-	const fullsize = $derived(selectedTab === "gaymoji" || consented);
++	const fullsize = $derived(
++		selectedTab === "gaymoji" || selectedTab === "phrases" || consented,
++	);
+ 
+ 	const contentOffsets: Partial<Record<StickerTab, number>> = {};
+ 
+@@ -108,6 +113,15 @@
+ 					holdSheetSize={() => sheetBody?.holdSize() ?? (() => {})}
+ 				/>
+ 			</Tabs.Content>
++			<Tabs.Content
++				value="phrases"
++				class="flex-1 flex-col data-[state=active]:flex"
++			>
++				<ComposerPhrasesTab
++					pickedId={picks.phrases?.id ?? null}
++					onPick={(pick) => toggle({ tab: "phrases", pick })}
++				/>
++			</Tabs.Content>
+ 		</MediaSheetBody>
+ 
+ 		<MediaSheetActions
+@@ -131,6 +145,10 @@
+ 				<SmileyIcon class="size-5" />
+ 				Gaymoji
+ 			</MediaSheetTab>
++			<MediaSheetTab value="phrases">
++				<ChatIcon class="size-5" />
++				Phrases
++			</MediaSheetTab>
+ 		</MediaSheetTabBar>
+ 	</Tabs.Root>
+ </MediaSheet>
+diff --git a/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/phrases/ComposerPhrasesTab.svelte b/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/phrases/ComposerPhrasesTab.svelte
+new file mode 100644
+index 00000000..01754202
+--- /dev/null
++++ b/src/routes/(protected)/chat/[conversationId]/message-composer/stickers/phrases/ComposerPhrasesTab.svelte
+@@ -0,0 +1,115 @@
++<script lang="ts">
++	import PlusIcon from "phosphor-svelte/lib/PlusIcon";
++	import TrashIcon from "phosphor-svelte/lib/TrashIcon";
++
++	import { showErrorToast } from "#lib/api/error-toast.ts";
++	import {
++		preferencesLoaded,
++		preferencesSnapshot,
++		setPreferences,
++	} from "#lib/app-data/preferences.svelte.ts";
++	import { Button } from "#lib/components/ui/button/index.ts";
++	import { Input } from "#lib/components/ui/input/index.ts";
++	import type { StickerPick } from "../sticker-pick";
++
++	const MAX_PHRASES = 50;
++	const MAX_LENGTH = 500;
++
++	let {
++		pickedId,
++		onPick,
++	}: {
++		pickedId: string | null;
++		onPick: (pick: StickerPick) => void;
++	} = $props();
++
++	let draft = $state("");
++
++	const phrases = $derived(
++		preferencesLoaded() ? preferencesSnapshot().savedPhrases : [],
++	);
++
++	async function save(next: string[]) {
++		try {
++			await setPreferences({ savedPhrases: next });
++		} catch (error) {
++			showErrorToast({ label: "Failed to save phrases", error });
++		}
++	}
++
++	async function add() {
++		const text = draft.trim().slice(0, MAX_LENGTH);
++		if (text === "" || phrases.includes(text)) return;
++		if (phrases.length >= MAX_PHRASES) return;
++		draft = "";
++		await save([...phrases, text]);
++	}
++
++	async function remove(text: string) {
++		await save(phrases.filter((phrase) => phrase !== text));
++	}
++
++	function pick(text: string) {
++		onPick({ id: `phrase:${text}`, message: { type: "Text", body: { text } } });
++	}
++</script>
++
++<div data-slot="saved-phrases" class="flex flex-col gap-3 p-3">
++	<form
++		class="flex gap-2"
++		onsubmit={(event) => {
++			event.preventDefault();
++			void add();
++		}}
++	>
++		<Input
++			bind:value={draft}
++			maxlength={MAX_LENGTH}
++			placeholder="New saved phrase..."
++			aria-label="New saved phrase"
++		/>
++		<Button
++			type="submit"
++			size="icon"
++			aria-label="Save phrase"
++			disabled={draft.trim() === "" || phrases.length >= MAX_PHRASES}
++		>
++			<PlusIcon class="size-5" />
++		</Button>
++	</form>
++
++	{#if phrases.length === 0}
++		<p class="px-1 py-6 text-center text-sm text-muted-foreground">
++			Save phrases you send often. They stay only on this device.
++		</p>
++	{:else}
++		<ul class="flex flex-col gap-2">
++			{#each phrases as phrase (phrase)}
++				{@const selected = pickedId === `phrase:${phrase}`}
++				<li class="flex items-center gap-2">
++					<button
++						type="button"
++						class={[
++							"min-w-0 flex-1 rounded-xl border px-3 py-2 text-left text-sm break-words whitespace-pre-wrap",
++							selected
++								? "border-primary bg-primary/15"
++								: "border-border bg-muted/40 hover:bg-muted",
++						]}
++						aria-pressed={selected}
++						onclick={() => pick(phrase)}
++					>
++						{phrase}
++					</button>
++					<Button
++						variant="ghost"
++						size="icon-sm"
++						aria-label="Delete phrase"
++						onclick={() => void remove(phrase)}
++					>
++						<TrashIcon class="size-4" />
++					</Button>
++				</li>
++			{/each}
++		</ul>
++	{/if}
++</div>

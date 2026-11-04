@@ -93,7 +93,12 @@ jobs:
           [ -f og/src-tauri/Info.ios.plist ] || cp self/Info.ios.plist og/src-tauri/Info.ios.plist
 
       - name: Parches para iOS
-        run: python3 self/ios-patches/apply.py og
+        run: |
+          python3 self/ios-patches/apply.py og
+          for p in self/ios-patches/*.patch; do
+            echo "Aplicando $p"
+            git -C og apply --3way --whitespace=nowarn "$PWD/$p"
+          done
 
       - name: Versión numérica para iOS
         run: |

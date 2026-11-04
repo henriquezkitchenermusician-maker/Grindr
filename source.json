@@ -1,5 +1,5 @@
 {
-  "name": "Open Grind iOS (compilación personal)",
+  "name": "Plus+ (compilación personal)",
   "identifier": "io.github.henriquezkitchenermusician-maker.grindr",
   "sourceURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/source.json",
   "website": "https://github.com/henriquezkitchenermusician-maker/Grindr",
@@ -8,10 +8,10 @@
   "tintColor": "#FFCC00",
   "apps": [
     {
-      "name": "Open Grind",
+      "name": "Plus+",
       "bundleIdentifier": "org.opengrind",
       "developerName": "Open Grind Governance",
-      "subtitle": "Cliente libre y no oficial de Grindr",
+      "subtitle": "Basado en Open Grind",
       "localizedDescription": "Cliente multiplataforma, libre, sin anuncios ni rastreadores. Código: https://git.opengrind.org/open-grind/open-grind (licencia MIT).",
       "iconURL": "https://raw.githubusercontent.com/henriquezkitchenermusician-maker/Grindr/auto-update/icon.png",
       "tintColor": "#FFCC00",
