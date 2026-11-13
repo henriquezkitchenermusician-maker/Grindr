@@ -45,6 +45,15 @@
       "versions": [
         {
           "version": "0.1.0",
+          "buildVersion": "26",
+          "date": "2026-11-13T06:55:16Z",
+          "localizedDescription": "Compilado del commit oficial 514710f.",
+          "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/ios-0.1.0-26-514710f/OpenGrind.ipa",
+          "size": 8399822,
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "0.1.0",
           "buildVersion": "25",
           "date": "2026-11-12T20:06:11Z",
           "localizedDescription": "Compilado del commit oficial e9e56ed.",
@@ -77,15 +86,6 @@
           "localizedDescription": "Compilado del commit oficial 6f461b0.",
           "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/ios-0.1.0-19-6f461b0/OpenGrind.ipa",
           "size": 8224331,
-          "minOSVersion": "14.0"
-        },
-        {
-          "version": "0.1.0",
-          "buildVersion": "7",
-          "date": "2026-11-04T23:52:49Z",
-          "localizedDescription": "Compilado del commit oficial 1556e85.",
-          "downloadURL": "https://github.com/henriquezkitchenermusician-maker/Grindr/releases/download/ios-0.1.0-7-1556e85/OpenGrind.ipa",
-          "size": 8231526,
           "minOSVersion": "14.0"
         }
       ],
